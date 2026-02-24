@@ -1,0 +1,204 @@
+cmake_minimum_required(VERSION 3.10)
+project(tinyblake VERSION 1.0.0 LANGUAGES CXX)
+
+include(CheckCXXCompilerFlag)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+option(BUILD_SHARED_LIBS "Build shared library" OFF)
+option(BUILD_TESTS "Build unit tests" OFF)
+option(BUILD_BENCH "Build benchmarks" OFF)
+option(BUILD_FUZZ "Build fuzz targets" OFF)
+option(FORCE_PORTABLE "Disable SIMD backends; use only portable code" OFF)
+
+# --- Library sources ---
+set(TINYBLAKE_SOURCES
+    src/secure_zero.cpp
+    src/cpuid.cpp
+    src/blake2b.cpp
+    src/hmac.cpp
+    src/pbkdf2.cpp
+    src/backend/blake2b_portable.cpp
+)
+
+# Conditionally add SIMD backend sources on x86_64
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND NOT FORCE_PORTABLE)
+    list(APPEND TINYBLAKE_SOURCES
+        src/backend/blake2b_x64.cpp
+        src/backend/blake2b_avx2.cpp
+        src/backend/blake2b_avx512.cpp
+    )
+endif()
+
+# Conditionally add ARM64 NEON backend sources
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64" AND NOT FORCE_PORTABLE)
+    list(APPEND TINYBLAKE_SOURCES
+        src/backend/blake2b_neon.cpp
+    )
+endif()
+
+add_library(tinyblake ${TINYBLAKE_SOURCES})
+
+# --- Shared library symbol visibility ---
+if(BUILD_SHARED_LIBS)
+    set_target_properties(tinyblake PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+    )
+    target_compile_definitions(tinyblake PUBLIC TINYBLAKE_SHARED=1)
+    target_compile_definitions(tinyblake PRIVATE TINYBLAKE_BUILDING=1)
+endif()
+
+if(FORCE_PORTABLE)
+    target_compile_definitions(tinyblake PUBLIC TINYBLAKE_FORCE_PORTABLE=1)
+endif()
+
+target_include_directories(tinyblake PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+target_include_directories(tinyblake PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+set_target_properties(tinyblake PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
+
+# --- Hardening flags ---
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(tinyblake PRIVATE
+        -Wall -Wextra -Wpedantic -Werror
+        -Wconversion -Wsign-conversion -Wshadow
+        -Wcast-align -Wundef
+        -Wformat=2 -Wformat-security
+        -fno-strict-overflow
+    )
+    # Stack protector: requires libssp or compiler-rt at link time.
+    # Probe with try_compile to catch Clang+MinGW toolchains that lack libssp.
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_FLAGS "-fstack-protector-strong")
+    check_cxx_source_compiles("int main() { char buf[64]; buf[0] = 0; return buf[0]; }" HAS_STACK_PROTECTOR_STRONG)
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(HAS_STACK_PROTECTOR_STRONG)
+        target_compile_options(tinyblake PRIVATE -fstack-protector-strong)
+    endif()
+    # -fPIC is implied on Windows PE; only needed on ELF/Mach-O
+    if(NOT WIN32)
+        target_compile_options(tinyblake PRIVATE -fPIC)
+        # Stack clash protection (Linux only — not supported on macOS/Apple Clang)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            target_compile_options(tinyblake PRIVATE -fstack-clash-protection)
+        endif()
+    endif()
+    # Intel CET control flow integrity (x86_64 only)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+        check_cxx_compiler_flag("-fcf-protection=full" HAS_CF_PROTECTION)
+        if(HAS_CF_PROTECTION)
+            target_compile_options(tinyblake PRIVATE -fcf-protection=full)
+        endif()
+    endif()
+    # -Wstrict-aliasing=2 only for GCC (Clang doesn't support the =2 level)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(tinyblake PRIVATE -Wstrict-aliasing=2)
+        # libstdc++ container assertions in Debug (bounds checks on operator[], etc.)
+        target_compile_options(tinyblake PRIVATE
+            $<$<CONFIG:Debug>:-D_GLIBCXX_ASSERTIONS>
+        )
+    endif()
+    # _FORTIFY_SOURCE requires optimization; not reliably supported on MinGW
+    if(NOT WIN32)
+        target_compile_options(tinyblake PRIVATE
+            $<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=2>
+        )
+    endif()
+    # Linker hardening (use LINK_FLAGS for CMake 3.10 compat)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set_property(TARGET tinyblake APPEND_STRING PROPERTY LINK_FLAGS
+            " -Wl,-z,relro,-z,now -Wl,-z,noexecstack")
+        # Reject undefined symbols in shared libs (catches missing TINYBLAKE_API)
+        if(BUILD_SHARED_LIBS)
+            set_property(TARGET tinyblake APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-z,defs")
+        endif()
+    endif()
+    # macOS: -bind_at_load is deprecated on modern macOS (eager binding is the default)
+    # MinGW linker hardening (DEP + ASLR) — only for GCC+MinGW (known GNU ld)
+    if(MINGW)
+        set_property(TARGET tinyblake APPEND_STRING PROPERTY LINK_FLAGS
+            " -Wl,--nxcompat -Wl,--dynamicbase -Wl,--high-entropy-va")
+    endif()
+elseif(MSVC)
+    target_compile_options(tinyblake PRIVATE
+        /W4 /WX
+        /sdl
+        /GS
+        /guard:cf
+    )
+    check_cxx_compiler_flag("/Qspectre" HAS_QSPECTRE)
+    if(HAS_QSPECTRE)
+        target_compile_options(tinyblake PRIVATE /Qspectre)
+    endif()
+    set_property(TARGET tinyblake APPEND_STRING PROPERTY LINK_FLAGS
+        " /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA")
+    # CET shadow stack compatibility
+    check_cxx_compiler_flag("/guard:ehcont" HAS_GUARD_EHCONT)
+    if(HAS_GUARD_EHCONT)
+        target_compile_options(tinyblake PRIVATE /guard:ehcont)
+        set_property(TARGET tinyblake APPEND_STRING PROPERTY LINK_FLAGS " /guard:ehcont /CETCOMPAT")
+    endif()
+endif()
+
+# --- Per-backend SIMD compile flags ---
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND NOT FORCE_PORTABLE)
+    # MinGW GCC + Debug: Windows x64 ABI only guarantees 16-byte stack alignment,
+    # but YMM/ZMM registers need 32/64-byte alignment. At -O0, GCC spills AVX
+    # registers to the stack with aligned moves (vmovdqa), which SIGSEGV on the
+    # misaligned stack. Force -O1 for SIMD backends in Debug mode so GCC keeps
+    # values in registers. -mpreferred-stack-boundary=5 is blocked by the ABI.
+    set(_MINGW_SIMD_FIX "")
+    if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set(_MINGW_SIMD_FIX " $<$<CONFIG:Debug>:-O1>")
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        set_source_files_properties(src/backend/blake2b_avx2.cpp PROPERTIES
+            COMPILE_FLAGS "-mavx2${_MINGW_SIMD_FIX}")
+        set_source_files_properties(src/backend/blake2b_avx512.cpp PROPERTIES
+            COMPILE_FLAGS "-mavx512f -mavx512vl -mavx512bw -mavx512vbmi2${_MINGW_SIMD_FIX}")
+    elseif(MSVC)
+        set_source_files_properties(src/backend/blake2b_avx2.cpp PROPERTIES
+            COMPILE_FLAGS "/arch:AVX2")
+        set_source_files_properties(src/backend/blake2b_avx512.cpp PROPERTIES
+            COMPILE_FLAGS "/arch:AVX512")
+    endif()
+endif()
+
+# --- Per-backend ARM64 compile flags ---
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64" AND NOT FORCE_PORTABLE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        # AArch64 has NEON by default; for 32-bit ARM we may need the flag
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^armv[78]")
+            set_source_files_properties(src/backend/blake2b_neon.cpp PROPERTIES
+                COMPILE_FLAGS "-mfpu=neon")
+        endif()
+    endif()
+    # MSVC on ARM64: NEON is enabled by default, no extra flags needed
+endif()
+
+# --- Tests ---
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# --- Benchmarks ---
+if(BUILD_BENCH)
+    add_subdirectory(bench)
+endif()
+
+# --- Fuzzing (Clang + Linux only) ---
+if(BUILD_FUZZ)
+    add_subdirectory(fuzz)
+endif()
