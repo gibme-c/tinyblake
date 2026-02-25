@@ -68,6 +68,13 @@ set_target_properties(tinyblake PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
+# --- Detect MinGW environment ---
+# Only use CMake's built-in MINGW (set for GCC with MinGW). Clang on Windows can
+# target either MinGW or MSVC ABI, and the linker varies (GNU ld vs lld-link) —
+# applying the wrong linker flags breaks the build. We let Clang on Windows rely
+# on the OS defaults for DEP/ASLR (enabled by default on modern Windows) rather
+# than guessing the linker style.
+
 # --- Hardening flags ---
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tinyblake PRIVATE
