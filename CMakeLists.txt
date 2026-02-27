@@ -58,6 +58,9 @@ endif()
 target_include_directories(tinyblake PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
+target_include_directories(tinyblake SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 target_include_directories(tinyblake PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
