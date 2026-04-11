@@ -33,10 +33,11 @@
  * These are the official test vectors from the RFC.
  */
 
-struct Rfc7693Vector {
-    const char* input_hex;
+struct Rfc7693Vector
+{
+    const char *input_hex;
     size_t outlen;
-    const char* expected_hex;
+    const char *expected_hex;
 };
 
 /*
@@ -45,19 +46,15 @@ struct Rfc7693Vector {
  */
 static const Rfc7693Vector rfc7693_vectors[] = {
     /* BLAKE2b-512("abc") */
-    {
-        "616263", /* "abc" */
-        64,
-        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
-    },
+    {"616263", /* "abc" */
+     64,
+     "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"
+     "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"},
     /* BLAKE2b-512("") — empty input */
-    {
-        "", /* empty */
-        64,
-        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031"
-        "afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
-    },
+    {"", /* empty */
+     64,
+     "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031"
+     "afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"},
 };
 
 static const size_t rfc7693_vector_count = sizeof(rfc7693_vectors) / sizeof(rfc7693_vectors[0]);

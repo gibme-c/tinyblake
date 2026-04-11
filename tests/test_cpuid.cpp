@@ -29,39 +29,42 @@
 #include "../src/cpu_features.h"
 #include "test_harness.h"
 
-TEST(cpuid_detect_no_crash) {
-  /* Just verify detect() doesn't crash and returns consistent results */
-  const auto &f1 = tinyblake::cpu::detect();
-  const auto &f2 = tinyblake::cpu::detect();
+TEST(cpuid_detect_no_crash)
+{
+    /* Just verify detect() doesn't crash and returns consistent results */
+    const auto &f1 = tinyblake::cpu::detect();
+    const auto &f2 = tinyblake::cpu::detect();
 
-  ASSERT_EQ(f1.avx2, f2.avx2);
-  ASSERT_EQ(f1.avx512f, f2.avx512f);
-  ASSERT_EQ(f1.neon, f2.neon);
+    ASSERT_EQ(f1.avx2, f2.avx2);
+    ASSERT_EQ(f1.avx512f, f2.avx512f);
+    ASSERT_EQ(f1.neon, f2.neon);
 }
 
-TEST(cpuid_feature_consistency) {
-  const auto &f = tinyblake::cpu::detect();
+TEST(cpuid_feature_consistency)
+{
+    const auto &f = tinyblake::cpu::detect();
 
-  /* If AVX-512F is supported, AVX2 must also be supported */
-  if (f.avx512f) {
-    ASSERT_TRUE(f.avx2);
-  }
+    /* If AVX-512F is supported, AVX2 must also be supported */
+    if (f.avx512f)
+    {
+        ASSERT_TRUE(f.avx2);
+    }
 
-  /* On x86, NEON should be false */
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
-    defined(_M_IX86)
-  ASSERT_TRUE(!f.neon);
+    /* On x86, NEON should be false */
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+    ASSERT_TRUE(!f.neon);
 #endif
 
-  /* On AArch64, NEON should be true */
+    /* On AArch64, NEON should be true */
 #if defined(__aarch64__) || defined(_M_ARM64)
-  ASSERT_TRUE(f.neon);
+    ASSERT_TRUE(f.neon);
 #endif
 }
 
-TEST(cpuid_cached) {
-  /* detect() returns references to the same static object */
-  const auto *p1 = &tinyblake::cpu::detect();
-  const auto *p2 = &tinyblake::cpu::detect();
-  ASSERT_EQ(p1, p2);
+TEST(cpuid_cached)
+{
+    /* detect() returns references to the same static object */
+    const auto *p1 = &tinyblake::cpu::detect();
+    const auto *p2 = &tinyblake::cpu::detect();
+    ASSERT_EQ(p1, p2);
 }

@@ -27,249 +27,399 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "test_harness.h"
+#include "vectors_hmac.inl"
+
 #include <stdexcept>
 #include <tinyblake/common.h>
 #include <tinyblake/hmac.h>
 #include <tinyblake/pbkdf2.h>
 
-#include "vectors_hmac.inl"
+TEST(hmac_blake2b_basic)
+{
+    auto key = test::hex_to_bytes(hmac_vectors[0].key_hex);
+    auto data = test::hex_to_bytes(hmac_vectors[0].data_hex);
+    auto expected = test::hex_to_bytes(hmac_vectors[0].expected_hex);
 
-TEST(hmac_blake2b_basic) {
-  auto key = test::hex_to_bytes(hmac_vectors[0].key_hex);
-  auto data = test::hex_to_bytes(hmac_vectors[0].data_hex);
-  auto expected = test::hex_to_bytes(hmac_vectors[0].expected_hex);
-
-  uint8_t out[64];
-  int rc =
-      tinyblake_hmac(out, 64, key.data(), key.size(), data.data(), data.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_hmac(out, 64, key.data(), key.size(), data.data(), data.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(hmac_blake2b_empty_data) {
-  auto key = test::hex_to_bytes(hmac_vectors[1].key_hex);
-  auto expected = test::hex_to_bytes(hmac_vectors[1].expected_hex);
+TEST(hmac_blake2b_empty_data)
+{
+    auto key = test::hex_to_bytes(hmac_vectors[1].key_hex);
+    auto expected = test::hex_to_bytes(hmac_vectors[1].expected_hex);
 
-  uint8_t out[64];
-  int rc = tinyblake_hmac(out, 64, key.data(), key.size(), nullptr, 0);
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_hmac(out, 64, key.data(), key.size(), nullptr, 0);
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(hmac_incremental_matches_oneshot) {
-  const char *key_str = "test-key";
-  const char *msg = "Hello, World! This is a test message for HMAC.";
+TEST(hmac_incremental_matches_oneshot)
+{
+    const char *key_str = "test-key";
+    const char *msg = "Hello, World! This is a test message for HMAC.";
 
-  /* One-shot */
-  uint8_t out1[64];
-  tinyblake_hmac(out1, 64, key_str, std::strlen(key_str), msg,
-                 std::strlen(msg));
+    /* One-shot */
+    uint8_t out1[64];
+    tinyblake_hmac(out1, 64, key_str, std::strlen(key_str), msg, std::strlen(msg));
 
-  /* Incremental */
-  tinyblake_hmac_state state;
-  tinyblake_hmac_init(&state, key_str, std::strlen(key_str));
-  tinyblake_hmac_update(&state, msg, 10);
-  tinyblake_hmac_update(&state, msg + 10, std::strlen(msg) - 10);
-  uint8_t out2[64];
-  tinyblake_hmac_final(&state, out2, 64);
+    /* Incremental */
+    tinyblake_hmac_state state;
+    tinyblake_hmac_init(&state, key_str, std::strlen(key_str));
+    tinyblake_hmac_update(&state, msg, 10);
+    tinyblake_hmac_update(&state, msg + 10, std::strlen(msg) - 10);
+    uint8_t out2[64];
+    tinyblake_hmac_final(&state, out2, 64);
 
-  ASSERT_BYTES_EQ(out1, out2, 64);
+    ASSERT_BYTES_EQ(out1, out2, 64);
 }
 
-TEST(hmac_cpp_api) {
-  std::vector<uint8_t> key = {0x01, 0x02, 0x03, 0x04};
-  std::string data = "test data";
+TEST(hmac_cpp_api)
+{
+    std::vector<uint8_t> key = {0x01, 0x02, 0x03, 0x04};
+    std::string data = "test data";
 
-  auto result1 =
-      tinyblake::hmac::mac(key.data(), key.size(), data.data(), data.size());
+    auto result1 = tinyblake::hmac::mac(key.data(), key.size(), data.data(), data.size());
 
-  tinyblake::hmac::hasher h(key);
-  h.update(data);
-  auto result2 = h.final_();
+    tinyblake::hmac::hasher h(key);
+    h.update(data);
+    auto result2 = h.final_();
 
-  ASSERT_EQ(result1.size(), 64u);
-  ASSERT_BYTES_EQ(result1.data(), result2.data(), 64);
+    ASSERT_EQ(result1.size(), 64u);
+    ASSERT_BYTES_EQ(result1.data(), result2.data(), 64);
 }
 
-TEST(hmac_long_key) {
-  /* Key longer than 128 bytes should be hashed first */
-  std::vector<uint8_t> long_key(200);
-  for (size_t i = 0; i < long_key.size(); ++i)
-    long_key[i] = static_cast<uint8_t>(i);
+TEST(hmac_long_key)
+{
+    /* Key longer than 128 bytes should be hashed first */
+    std::vector<uint8_t> long_key(200);
+    for (size_t i = 0; i < long_key.size(); ++i)
+        long_key[i] = static_cast<uint8_t>(i);
 
-  const char *msg = "data";
+    const char *msg = "data";
 
-  uint8_t out[64];
-  int rc = tinyblake_hmac(out, 64, long_key.data(), long_key.size(), msg,
-                          std::strlen(msg));
-  ASSERT_EQ(rc, 0);
+    uint8_t out[64];
+    int rc = tinyblake_hmac(out, 64, long_key.data(), long_key.size(), msg, std::strlen(msg));
+    ASSERT_EQ(rc, 0);
 
-  /* Verify it's deterministic */
-  uint8_t out2[64];
-  tinyblake_hmac(out2, 64, long_key.data(), long_key.size(), msg,
-                 std::strlen(msg));
-  ASSERT_BYTES_EQ(out, out2, 64);
+    /* Verify it's deterministic */
+    uint8_t out2[64];
+    tinyblake_hmac(out2, 64, long_key.data(), long_key.size(), msg, std::strlen(msg));
+    ASSERT_BYTES_EQ(out, out2, 64);
 }
 
-TEST(hmac_long_key_vector) {
-  /* Verify against known-good vector for 200-byte key */
-  auto key = test::hex_to_bytes(hmac_vectors[2].key_hex);
-  auto data = test::hex_to_bytes(hmac_vectors[2].data_hex);
-  auto expected = test::hex_to_bytes(hmac_vectors[2].expected_hex);
+TEST(hmac_long_key_vector)
+{
+    /* Verify against known-good vector for 200-byte key */
+    auto key = test::hex_to_bytes(hmac_vectors[2].key_hex);
+    auto data = test::hex_to_bytes(hmac_vectors[2].data_hex);
+    auto expected = test::hex_to_bytes(hmac_vectors[2].expected_hex);
 
-  uint8_t out[64];
-  int rc =
-      tinyblake_hmac(out, 64, key.data(), key.size(), data.data(), data.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_hmac(out, 64, key.data(), key.size(), data.data(), data.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(hmac_null_key_rejected) {
-  tinyblake_hmac_state state;
-  ASSERT_EQ(tinyblake_hmac_init(&state, nullptr, 0), -1);
-  ASSERT_EQ(tinyblake_hmac_init(&state, nullptr, 4), -1);
+TEST(hmac_null_key_rejected)
+{
+    tinyblake_hmac_state state;
+    ASSERT_EQ(tinyblake_hmac_init(&state, nullptr, 0), -1);
+    ASSERT_EQ(tinyblake_hmac_init(&state, nullptr, 4), -1);
 
-  uint8_t key[4] = {1, 2, 3, 4};
-  ASSERT_EQ(tinyblake_hmac_init(&state, key, 0), -1);
+    uint8_t key[4] = {1, 2, 3, 4};
+    ASSERT_EQ(tinyblake_hmac_init(&state, key, 0), -1);
 }
 
-TEST(hmac_cpp_null_key_throws) {
-  bool caught = false;
-  try {
-    tinyblake::hmac::hasher h(nullptr, 0);
-    (void)h;
-  } catch (const std::invalid_argument &) {
-    caught = true;
-  }
-  ASSERT_TRUE(caught);
+TEST(hmac_cpp_null_key_throws)
+{
+    bool caught = false;
+    try
+    {
+        tinyblake::hmac::hasher h(nullptr, 0);
+        (void)h;
+    }
+    catch (const std::invalid_argument &)
+    {
+        caught = true;
+    }
+    ASSERT_TRUE(caught);
 
-  caught = false;
-  uint8_t key[4] = {1, 2, 3, 4};
-  try {
-    tinyblake::hmac::hasher h(key, 0);
-    (void)h;
-  } catch (const std::invalid_argument &) {
-    caught = true;
-  }
-  ASSERT_TRUE(caught);
+    caught = false;
+    uint8_t key[4] = {1, 2, 3, 4};
+    try
+    {
+        tinyblake::hmac::hasher h(key, 0);
+        (void)h;
+    }
+    catch (const std::invalid_argument &)
+    {
+        caught = true;
+    }
+    ASSERT_TRUE(caught);
 }
 
-TEST(hmac_constant_time_eq) {
-  uint8_t a[64] = {};
-  uint8_t b[64] = {};
+TEST(hmac_constant_time_eq)
+{
+    uint8_t a[64] = {};
+    uint8_t b[64] = {};
 
-  /* Equal buffers */
-  for (size_t i = 0; i < 64; ++i) {
-    a[i] = static_cast<uint8_t>(i);
-    b[i] = static_cast<uint8_t>(i);
-  }
-  ASSERT_EQ(tinyblake_constant_time_eq(a, b, 64), 1);
-  ASSERT_TRUE(tinyblake::constant_time_eq(a, b, 64));
+    /* Equal buffers */
+    for (size_t i = 0; i < 64; ++i)
+    {
+        a[i] = static_cast<uint8_t>(i);
+        b[i] = static_cast<uint8_t>(i);
+    }
+    ASSERT_EQ(tinyblake_constant_time_eq(a, b, 64), 1);
+    ASSERT_TRUE(tinyblake::constant_time_eq(a, b, 64));
 
-  /* Differ in last byte */
-  b[63] ^= 0x01;
-  ASSERT_EQ(tinyblake_constant_time_eq(a, b, 64), 0);
-  ASSERT_TRUE(!tinyblake::constant_time_eq(a, b, 64));
+    /* Differ in last byte */
+    b[63] ^= 0x01;
+    ASSERT_EQ(tinyblake_constant_time_eq(a, b, 64), 0);
+    ASSERT_TRUE(!tinyblake::constant_time_eq(a, b, 64));
 
-  /* Differ in first byte */
-  b[63] = a[63];
-  b[0] ^= 0x80;
-  ASSERT_EQ(tinyblake_constant_time_eq(a, b, 64), 0);
+    /* Differ in first byte */
+    b[63] = a[63];
+    b[0] ^= 0x80;
+    ASSERT_EQ(tinyblake_constant_time_eq(a, b, 64), 0);
 
-  /* Zero-length compare is always equal */
-  ASSERT_EQ(tinyblake_constant_time_eq(a, b, 0), 1);
+    /* Zero-length compare is always equal */
+    ASSERT_EQ(tinyblake_constant_time_eq(a, b, 0), 1);
 }
 
-TEST(hmac_update_error_paths) {
-  /* null state */
-  ASSERT_EQ(tinyblake_hmac_update(nullptr, "abc", 3), -1);
+TEST(hmac_update_error_paths)
+{
+    /* null state */
+    ASSERT_EQ(tinyblake_hmac_update(nullptr, "abc", 3), -1);
 }
 
-TEST(hmac_final_error_paths) {
-  uint8_t out[64];
+TEST(hmac_final_error_paths)
+{
+    uint8_t out[64];
 
-  /* null state */
-  ASSERT_EQ(tinyblake_hmac_final(nullptr, out, 64), -1);
+    /* null state */
+    ASSERT_EQ(tinyblake_hmac_final(nullptr, out, 64), -1);
 
-  /* null output */
-  tinyblake_hmac_state S;
-  uint8_t key[4] = {1, 2, 3, 4};
-  tinyblake_hmac_init(&S, key, 4);
-  ASSERT_EQ(tinyblake_hmac_final(&S, nullptr, 64), -1);
+    /* null output */
+    tinyblake_hmac_state S;
+    uint8_t key[4] = {1, 2, 3, 4};
+    tinyblake_hmac_init(&S, key, 4);
+    ASSERT_EQ(tinyblake_hmac_final(&S, nullptr, 64), -1);
 
-  /* outlen too small */
-  tinyblake_hmac_init(&S, key, 4);
-  ASSERT_EQ(tinyblake_hmac_final(&S, out, 63), -1);
+    /* outlen too small */
+    tinyblake_hmac_init(&S, key, 4);
+    ASSERT_EQ(tinyblake_hmac_final(&S, out, 63), -1);
 }
 
-TEST(hmac_consistency_across_chunk_sizes) {
-  /* HMAC with different update chunk sizes should yield same result */
-  const char *key = "hmac-key";
-  std::vector<uint8_t> data(500);
-  for (size_t i = 0; i < data.size(); ++i)
-    data[i] = static_cast<uint8_t>(i % 256);
+TEST(hmac_consistency_across_chunk_sizes)
+{
+    /* HMAC with different update chunk sizes should yield same result */
+    const char *key = "hmac-key";
+    std::vector<uint8_t> data(500);
+    for (size_t i = 0; i < data.size(); ++i)
+        data[i] = static_cast<uint8_t>(i % 256);
 
-  uint8_t ref[64];
-  tinyblake_hmac(ref, 64, key, std::strlen(key), data.data(), data.size());
+    uint8_t ref[64];
+    tinyblake_hmac(ref, 64, key, std::strlen(key), data.data(), data.size());
 
-  /* Feed 1 byte at a time */
-  tinyblake_hmac_state S;
-  tinyblake_hmac_init(&S, key, std::strlen(key));
-  for (size_t i = 0; i < data.size(); ++i) {
-    tinyblake_hmac_update(&S, &data[i], 1);
-  }
-  uint8_t out[64];
-  tinyblake_hmac_final(&S, out, 64);
+    /* Feed 1 byte at a time */
+    tinyblake_hmac_state S;
+    tinyblake_hmac_init(&S, key, std::strlen(key));
+    for (size_t i = 0; i < data.size(); ++i)
+    {
+        tinyblake_hmac_update(&S, &data[i], 1);
+    }
+    uint8_t out[64];
+    tinyblake_hmac_final(&S, out, 64);
 
-  ASSERT_BYTES_EQ(out, ref, 64);
+    ASSERT_BYTES_EQ(out, ref, 64);
 }
 
-TEST(hmac_null_state_init) {
-  ASSERT_EQ(tinyblake_hmac_init(nullptr, "key", 3), -1);
+TEST(hmac_null_state_init)
+{
+    ASSERT_EQ(tinyblake_hmac_init(nullptr, "key", 3), -1);
 }
 
-TEST(hmac_move_construct) {
-  std::vector<uint8_t> key = {0x01, 0x02, 0x03, 0x04};
-  std::string data = "move test data";
+TEST(hmac_move_construct)
+{
+    std::vector<uint8_t> key = {0x01, 0x02, 0x03, 0x04};
+    std::string data = "move test data";
 
-  auto expected =
-      tinyblake::hmac::mac(key.data(), key.size(), data.data(), data.size());
+    auto expected = tinyblake::hmac::mac(key.data(), key.size(), data.data(), data.size());
 
-  tinyblake::hmac::hasher h1(key);
-  h1.update(data);
-  tinyblake::hmac::hasher h2(std::move(h1));
-  auto digest = h2.final_();
+    tinyblake::hmac::hasher h1(key);
+    h1.update(data);
+    tinyblake::hmac::hasher h2(std::move(h1));
+    auto digest = h2.final_();
 
-  ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
+    ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
 }
 
-TEST(hmac_move_assign) {
-  std::vector<uint8_t> key = {0x05, 0x06, 0x07, 0x08};
-  std::string data = "move assign test";
+TEST(hmac_move_assign)
+{
+    std::vector<uint8_t> key = {0x05, 0x06, 0x07, 0x08};
+    std::string data = "move assign test";
 
-  auto expected =
-      tinyblake::hmac::mac(key.data(), key.size(), data.data(), data.size());
+    auto expected = tinyblake::hmac::mac(key.data(), key.size(), data.data(), data.size());
 
-  tinyblake::hmac::hasher h1(key);
-  h1.update(data);
-  tinyblake::hmac::hasher h2(key);
-  h2 = std::move(h1);
-  auto digest = h2.final_();
+    tinyblake::hmac::hasher h1(key);
+    h1.update(data);
+    tinyblake::hmac::hasher h2(key);
+    h2 = std::move(h1);
+    auto digest = h2.final_();
 
-  ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
+    ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
 }
 
-TEST(pbkdf2_null_password_rejected) {
-  uint8_t out[64];
-  uint8_t salt[4] = {0x01, 0x02, 0x03, 0x04};
-  /* null password fails in HMAC layer */
-  ASSERT_EQ(tinyblake_pbkdf2(out, 64, nullptr, 0, salt, 4, 1), -1);
+TEST(pbkdf2_null_password_rejected)
+{
+    uint8_t out[64];
+    uint8_t salt[4] = {0x01, 0x02, 0x03, 0x04};
+    /* null password fails in HMAC layer */
+    ASSERT_EQ(tinyblake_pbkdf2(out, 64, nullptr, 0, salt, 4, 1), -1);
 }
 
-TEST(pbkdf2_empty_password_rejected) {
-  uint8_t out[64];
-  uint8_t salt[4] = {0x01, 0x02, 0x03, 0x04};
-  /* empty (zero-length) password fails in HMAC layer (keylen == 0) */
-  uint8_t pw = 0;
-  ASSERT_EQ(tinyblake_pbkdf2(out, 64, &pw, 0, salt, 4, 1), -1);
+TEST(pbkdf2_empty_password_rejected)
+{
+    uint8_t out[64];
+    uint8_t salt[4] = {0x01, 0x02, 0x03, 0x04};
+    /* empty (zero-length) password fails in HMAC layer (keylen == 0) */
+    uint8_t pw = 0;
+    ASSERT_EQ(tinyblake_pbkdf2(out, 64, &pw, 0, salt, 4, 1), -1);
+}
+
+/* ─── reset() semantics ─── */
+
+TEST(hmac_cpp_reset_matches_fresh)
+{
+    uint8_t key[16];
+    for (int i = 0; i < 16; ++i)
+        key[i] = static_cast<uint8_t>(i);
+
+    tinyblake::hmac::hasher h1(key, 16);
+    h1.update("hello", 5);
+    (void)h1.final_();
+    h1.reset();
+    h1.update("world", 5);
+    auto after_reset = h1.final_();
+
+    tinyblake::hmac::hasher h2(key, 16);
+    h2.update("world", 5);
+    auto fresh = h2.final_();
+
+    ASSERT_BYTES_EQ(after_reset.data(), fresh.data(), 64);
+}
+
+TEST(hmac_cpp_reset_long_key_matches_fresh)
+{
+    /* Long-key path: key_pad_ holds pre-hashed key; reset must still produce
+     * the same digest as a fresh hasher built from the original long key. */
+    std::vector<uint8_t> long_key(200);
+    for (size_t i = 0; i < long_key.size(); ++i)
+        long_key[i] = static_cast<uint8_t>((i * 7) & 0xFF);
+
+    tinyblake::hmac::hasher h1(long_key.data(), long_key.size());
+    h1.update("first-pass", 10);
+    (void)h1.final_();
+    h1.reset();
+    h1.update("second-pass", 11);
+    auto after_reset = h1.final_();
+
+    tinyblake::hmac::hasher h2(long_key.data(), long_key.size());
+    h2.update("second-pass", 11);
+    auto fresh = h2.final_();
+
+    ASSERT_BYTES_EQ(after_reset.data(), fresh.data(), 64);
+}
+
+/* ─── buffer-form final_(void*, size_t) ─── */
+
+TEST(hmac_cpp_final_buffer_form)
+{
+    std::vector<uint8_t> key = {0x11, 0x22, 0x33, 0x44};
+    auto expected = tinyblake::hmac::mac(key.data(), key.size(), "abc", 3);
+
+    tinyblake::hmac::hasher h(key);
+    h.update("abc", 3);
+    uint8_t out[64];
+    h.final_(out, 64);
+
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
+}
+
+TEST(hmac_cpp_final_buffer_form_short_throws)
+{
+    std::vector<uint8_t> key = {0xAA, 0xBB};
+    tinyblake::hmac::hasher h(key);
+    h.update("abc", 3);
+
+    uint8_t out[32];
+    bool caught = false;
+    try
+    {
+        h.final_(out, 32); /* outlen < 64 must be rejected */
+    }
+    catch (const std::runtime_error &)
+    {
+        caught = true;
+    }
+    ASSERT_TRUE(caught);
+}
+
+/* ─── self move-assignment ─── */
+
+TEST(hmac_cpp_self_move_assign_safe)
+{
+    std::vector<uint8_t> key = {0x42, 0x43, 0x44, 0x45};
+    auto expected = tinyblake::hmac::mac(key.data(), key.size(), "payload", 7);
+
+    tinyblake::hmac::hasher h(key);
+    h.update("payload", 7);
+    /* Route the self-move through a pointer to dodge the compiler's
+     * syntactic -Wself-move check (GCC, Clang, and MSVC all flag the
+     * literal h = std::move(h) form). The move-assign operator has a
+     * this==&o guard; this test proves it works. */
+    tinyblake::hmac::hasher *p = &h;
+    h = std::move(*p);
+    auto digest = h.final_();
+
+    ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
+}
+
+/* ─── long-key determinism + extreme length ─── */
+
+TEST(hmac_long_key_determinism_200)
+{
+    std::vector<uint8_t> long_key(200);
+    for (size_t i = 0; i < long_key.size(); ++i)
+        long_key[i] = static_cast<uint8_t>((i * 11 + 3) & 0xFF);
+
+    const char *msg = "deterministic-200byte-key";
+    uint8_t out1[64], out2[64], out3[64];
+    ASSERT_EQ(tinyblake_hmac(out1, 64, long_key.data(), long_key.size(), msg, std::strlen(msg)), 0);
+    ASSERT_EQ(tinyblake_hmac(out2, 64, long_key.data(), long_key.size(), msg, std::strlen(msg)), 0);
+    ASSERT_EQ(tinyblake_hmac(out3, 64, long_key.data(), long_key.size(), msg, std::strlen(msg)), 0);
+    ASSERT_BYTES_EQ(out1, out2, 64);
+    ASSERT_BYTES_EQ(out2, out3, 64);
+}
+
+TEST(hmac_long_key_1024)
+{
+    /* 1024-byte key (8 full blocks). Exercises the long-key pre-hash path
+     * across many compress iterations. */
+    std::vector<uint8_t> long_key(1024);
+    for (size_t i = 0; i < long_key.size(); ++i)
+        long_key[i] = static_cast<uint8_t>(i & 0xFF);
+
+    const char *msg = "1024-byte-key-test";
+    uint8_t out[64];
+    ASSERT_EQ(tinyblake_hmac(out, 64, long_key.data(), long_key.size(), msg, std::strlen(msg)), 0);
+
+    /* Determinism */
+    uint8_t out2[64];
+    ASSERT_EQ(tinyblake_hmac(out2, 64, long_key.data(), long_key.size(), msg, std::strlen(msg)), 0);
+    ASSERT_BYTES_EQ(out, out2, 64);
 }

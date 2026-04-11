@@ -50,36 +50,39 @@
 #endif
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-/**
- * Securely zero a memory region, guaranteed not to be optimized away.
- */
-TINYBLAKE_API void tinyblake_secure_zero(void *ptr, size_t len);
+    /**
+     * Securely zero a memory region, guaranteed not to be optimized away.
+     */
+    TINYBLAKE_API void tinyblake_secure_zero(void *ptr, size_t len);
 
-/**
- * Constant-time comparison of two byte buffers.
- * Returns 1 if equal, 0 if not. Runs in time proportional to len
- * regardless of where the first difference occurs.
- */
-TINYBLAKE_API int tinyblake_constant_time_eq(const void *a, const void *b,
-                                             size_t len);
+    /**
+     * Constant-time comparison of two byte buffers.
+     * Returns 1 if equal, 0 if not. Runs in time proportional to len
+     * regardless of where the first difference occurs.
+     */
+    TINYBLAKE_API int tinyblake_constant_time_eq(const void *a, const void *b, size_t len);
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
 #ifdef __cplusplus
-namespace tinyblake {
+namespace tinyblake
+{
 
-inline void secure_zero(void *ptr, size_t len) {
-  tinyblake_secure_zero(ptr, len);
-}
+    inline void secure_zero(void *ptr, size_t len)
+    {
+        tinyblake_secure_zero(ptr, len);
+    }
 
-inline bool constant_time_eq(const void *a, const void *b, size_t len) {
-  return tinyblake_constant_time_eq(a, b, len) == 1;
-}
+    inline bool constant_time_eq(const void *a, const void *b, size_t len)
+    {
+        return tinyblake_constant_time_eq(a, b, len) == 1;
+    }
 
 } /* namespace tinyblake */
 #endif

@@ -31,35 +31,30 @@
 
 #include <cstdint>
 
-namespace tinyblake {
+namespace tinyblake
+{
 
-/**
- * Compress function signature shared by all backends.
- *
- * @param state     8-word chaining value (modified in place)
- * @param block     128-byte message block
- * @param t0, t1    byte counter (low, high)
- * @param last      true if this is the final block
- */
-using blake2b_compress_fn = void (*)(uint64_t state[8],
-                                     const uint8_t block[128], uint64_t t0,
-                                     uint64_t t1, bool last);
+    /**
+     * Compress function signature shared by all backends.
+     *
+     * @param state     8-word chaining value (modified in place)
+     * @param block     128-byte message block
+     * @param t0, t1    byte counter (low, high)
+     * @param last      true if this is the final block
+     */
+    using blake2b_compress_fn =
+        void (*)(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last);
 
-/* Backend implementations */
-void blake2b_compress_portable(uint64_t state[8], const uint8_t block[128],
-                               uint64_t t0, uint64_t t1, bool last);
+    /* Backend implementations */
+    void blake2b_compress_portable(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last);
 
-void blake2b_compress_x64(uint64_t state[8], const uint8_t block[128],
-                          uint64_t t0, uint64_t t1, bool last);
+    void blake2b_compress_x64(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last);
 
-void blake2b_compress_avx2(uint64_t state[8], const uint8_t block[128],
-                           uint64_t t0, uint64_t t1, bool last);
+    void blake2b_compress_avx2(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last);
 
-void blake2b_compress_avx512(uint64_t state[8], const uint8_t block[128],
-                             uint64_t t0, uint64_t t1, bool last);
+    void blake2b_compress_avx512(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last);
 
-void blake2b_compress_neon(uint64_t state[8], const uint8_t block[128],
-                           uint64_t t0, uint64_t t1, bool last);
+    void blake2b_compress_neon(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last);
 
 } /* namespace tinyblake */
 

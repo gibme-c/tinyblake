@@ -27,134 +27,137 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "test_harness.h"
-#include <tinyblake/blake2b.h>
-
 #include "vectors_blake2b_keyed.inl"
 
+#include <tinyblake/blake2b.h>
+
 /* Build input for keyed KAT: input(i) = 00 01 02 ... (i-1) */
-static std::vector<uint8_t> make_input(size_t len) {
-  std::vector<uint8_t> v(len);
-  for (size_t i = 0; i < len; ++i) {
-    v[i] = static_cast<uint8_t>(i & 0xFF);
-  }
-  return v;
+static std::vector<uint8_t> make_input(size_t len)
+{
+    std::vector<uint8_t> v(len);
+    for (size_t i = 0; i < len; ++i)
+    {
+        v[i] = static_cast<uint8_t>(i & 0xFF);
+    }
+    return v;
 }
 
-TEST(blake2b_keyed_kat_0) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[0].expected_hex);
-  auto input = make_input(keyed_kat_vectors[0].input_len);
+TEST(blake2b_keyed_kat_0)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[0].expected_hex);
+    auto input = make_input(keyed_kat_vectors[0].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_kat_1) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[1].expected_hex);
-  auto input = make_input(keyed_kat_vectors[1].input_len);
+TEST(blake2b_keyed_kat_1)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[1].expected_hex);
+    auto input = make_input(keyed_kat_vectors[1].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_kat_2) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[2].expected_hex);
-  auto input = make_input(keyed_kat_vectors[2].input_len);
+TEST(blake2b_keyed_kat_2)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[2].expected_hex);
+    auto input = make_input(keyed_kat_vectors[2].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_kat_3) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[3].expected_hex);
-  auto input = make_input(keyed_kat_vectors[3].input_len);
+TEST(blake2b_keyed_kat_3)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[3].expected_hex);
+    auto input = make_input(keyed_kat_vectors[3].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_kat_63) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[4].expected_hex);
-  auto input = make_input(keyed_kat_vectors[4].input_len);
+TEST(blake2b_keyed_kat_63)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[4].expected_hex);
+    auto input = make_input(keyed_kat_vectors[4].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_kat_64) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[5].expected_hex);
-  auto input = make_input(keyed_kat_vectors[5].input_len);
+TEST(blake2b_keyed_kat_64)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[5].expected_hex);
+    auto input = make_input(keyed_kat_vectors[5].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_kat_128) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[6].expected_hex);
-  auto input = make_input(keyed_kat_vectors[6].input_len);
+TEST(blake2b_keyed_kat_128)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[6].expected_hex);
+    auto input = make_input(keyed_kat_vectors[6].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_kat_255) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[7].expected_hex);
-  auto input = make_input(keyed_kat_vectors[7].input_len);
+TEST(blake2b_keyed_kat_255)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[7].expected_hex);
+    auto input = make_input(keyed_kat_vectors[7].input_len);
 
-  uint8_t out[64];
-  int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(),
-                             key.size());
-  ASSERT_EQ(rc, 0);
-  ASSERT_BYTES_EQ(out, expected.data(), 64);
+    uint8_t out[64];
+    int rc = tinyblake_blake2b(out, 64, input.data(), input.size(), key.data(), key.size());
+    ASSERT_EQ(rc, 0);
+    ASSERT_BYTES_EQ(out, expected.data(), 64);
 }
 
-TEST(blake2b_keyed_cpp_api) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[0].expected_hex);
+TEST(blake2b_keyed_cpp_api)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[0].expected_hex);
 
-  auto digest =
-      tinyblake::blake2b::keyed_hash(key.data(), key.size(), nullptr, 0, 64);
-  ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
+    auto digest = tinyblake::blake2b::keyed_hash(key.data(), key.size(), nullptr, 0, 64);
+    ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
 }
 
-TEST(blake2b_keyed_incremental) {
-  auto key = test::hex_to_bytes(keyed_kat_key_hex);
-  auto expected = test::hex_to_bytes(keyed_kat_vectors[6].expected_hex);
-  auto input = make_input(128);
+TEST(blake2b_keyed_incremental)
+{
+    auto key = test::hex_to_bytes(keyed_kat_key_hex);
+    auto expected = test::hex_to_bytes(keyed_kat_vectors[6].expected_hex);
+    auto input = make_input(128);
 
-  /* Feed incrementally */
-  tinyblake::blake2b::hasher h(key.data(), key.size(), 64);
-  h.update(input.data(), 50);
-  h.update(input.data() + 50, 78);
-  auto digest = h.final_();
+    /* Feed incrementally */
+    tinyblake::blake2b::hasher h(key.data(), key.size(), 64);
+    h.update(input.data(), 50);
+    h.update(input.data() + 50, 78);
+    auto digest = h.final_();
 
-  ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
+    ASSERT_BYTES_EQ(digest.data(), expected.data(), 64);
 }

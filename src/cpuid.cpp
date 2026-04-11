@@ -28,8 +28,7 @@
 
 #include "cpu_features.h"
 
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
-    defined(_M_IX86)
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #define TINYBLAKE_X86 1
 #if defined(_MSC_VER)
 #include <intrin.h>
@@ -38,87 +37,96 @@
 #endif
 #endif
 
-namespace tinyblake {
-namespace cpu {
+namespace tinyblake
+{
+    namespace cpu
+    {
 
-static Features query_features() {
-  Features f;
+        static Features query_features()
+        {
+            Features f;
 
 #if defined(TINYBLAKE_X86)
 #if defined(_MSC_VER)
-  int regs[4] = {0, 0, 0, 0};
+            int regs[4] = {0, 0, 0, 0};
 
-  /* Check max basic leaf */
-  __cpuid(regs, 0);
-  int max_leaf = regs[0];
-  if (max_leaf >= 7) {
-    __cpuidex(regs, 7, 0);
-    f.avx2 = (regs[1] & (1 << 5)) != 0;
-    f.avx512f = (regs[1] & (1 << 16)) != 0;
-    f.avx512vl = (regs[1] & (1 << 31)) != 0;
-    f.avx512vbmi2 = (regs[2] & (1 << 6)) != 0;
-  }
+            /* Check max basic leaf */
+            __cpuid(regs, 0);
+            int max_leaf = regs[0];
+            if (max_leaf >= 7)
+            {
+                __cpuidex(regs, 7, 0);
+                f.avx2 = (regs[1] & (1 << 5)) != 0;
+                f.avx512f = (regs[1] & (1 << 16)) != 0;
+                f.avx512vl = (regs[1] & (1 << 31)) != 0;
+                f.avx512vbmi2 = (regs[2] & (1 << 6)) != 0;
+            }
 #else
-  unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
+            unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
 
-  /* Check max basic leaf */
-  __get_cpuid(0, &eax, &ebx, &ecx, &edx);
-  if (eax >= 7) {
-    __get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx);
-    /* EBX bit 5: AVX2 */
-    f.avx2 = (ebx & (1u << 5)) != 0;
-    /* EBX bit 16: AVX-512F */
-    f.avx512f = (ebx & (1u << 16)) != 0;
-    /* EBX bit 31: AVX-512VL */
-    f.avx512vl = (ebx & (1u << 31)) != 0;
-    /* ECX bit 6: AVX-512 VBMI2 */
-    f.avx512vbmi2 = (ecx & (1u << 6)) != 0;
-  }
+            /* Check max basic leaf */
+            __get_cpuid(0, &eax, &ebx, &ecx, &edx);
+            if (eax >= 7)
+            {
+                __get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx);
+                /* EBX bit 5: AVX2 */
+                f.avx2 = (ebx & (1u << 5)) != 0;
+                /* EBX bit 16: AVX-512F */
+                f.avx512f = (ebx & (1u << 16)) != 0;
+                /* EBX bit 31: AVX-512VL */
+                f.avx512vl = (ebx & (1u << 31)) != 0;
+                /* ECX bit 6: AVX-512 VBMI2 */
+                f.avx512vbmi2 = (ecx & (1u << 6)) != 0;
+            }
 #endif
 
-  /* Also verify OS support for AVX via XGETBV */
-  if (f.avx2 || f.avx512f) {
+            /* Also verify OS support for AVX via XGETBV */
+            if (f.avx2 || f.avx512f)
+            {
 #if defined(_MSC_VER)
-    unsigned long long xcr0 = _xgetbv(0);
+                unsigned long long xcr0 = _xgetbv(0);
 #else
-    unsigned int lo, hi;
-    __asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
-    unsigned long long xcr0 = ((unsigned long long)hi << 32) | lo;
+                unsigned int lo, hi;
+                __asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
+                unsigned long long xcr0 = ((unsigned long long)hi << 32) | lo;
 #endif
 
-    bool os_avx = (xcr0 & 0x06) == 0x06;    /* XMM + YMM */
-    bool os_avx512 = (xcr0 & 0xE6) == 0xE6; /* XMM + YMM + ZMM + opmask */
+                bool os_avx = (xcr0 & 0x06) == 0x06; /* XMM + YMM */
+                bool os_avx512 = (xcr0 & 0xE6) == 0xE6; /* XMM + YMM + ZMM + opmask */
 
-    if (!os_avx) {
-      f.avx2 = false;
-      f.avx512f = false;
-    }
-    if (!os_avx512) {
-      f.avx512f = false;
-      f.avx512vl = false;
-      f.avx512vbmi2 = false;
-    }
-  }
+                if (!os_avx)
+                {
+                    f.avx2 = false;
+                    f.avx512f = false;
+                }
+                if (!os_avx512)
+                {
+                    f.avx512f = false;
+                    f.avx512vl = false;
+                    f.avx512vbmi2 = false;
+                }
+            }
 #endif /* TINYBLAKE_X86 */
 
-  /* ARM/AArch64 NEON detection */
+            /* ARM/AArch64 NEON detection */
 #if defined(__aarch64__) || defined(_M_ARM64)
-  /* AArch64 always has NEON */
-  f.neon = true;
+            /* AArch64 always has NEON */
+            f.neon = true;
 #elif defined(__ARM_NEON)
-  f.neon = true;
+            f.neon = true;
 #elif defined(_M_ARM)
-  /* 32-bit ARM on MSVC — NEON may or may not be present */
-  f.neon = false; /* conservative: no runtime detection on 32-bit Windows ARM */
+            /* 32-bit ARM on MSVC — NEON may or may not be present */
+            f.neon = false; /* conservative: no runtime detection on 32-bit Windows ARM */
 #endif
 
-  return f;
-}
+            return f;
+        }
 
-const Features &detect() {
-  static const Features cached = query_features();
-  return cached;
-}
+        const Features &detect()
+        {
+            static const Features cached = query_features();
+            return cached;
+        }
 
-} /* namespace cpu */
+    } /* namespace cpu */
 } /* namespace tinyblake */

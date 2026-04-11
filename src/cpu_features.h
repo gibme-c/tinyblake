@@ -31,24 +31,27 @@
 
 #include "tinyblake/common.h"
 
-namespace tinyblake {
-namespace cpu {
+namespace tinyblake
+{
+    namespace cpu
+    {
 
-struct Features {
-  bool avx2 = false;
-  bool avx512f = false;
-  bool avx512vl = false;
-  bool avx512vbmi2 = false;
-  bool neon = false;
-};
+        struct Features
+        {
+            bool avx2 = false;
+            bool avx512f = false;
+            bool avx512vl = false;
+            bool avx512vbmi2 = false;
+            bool neon = false;
+        };
 
-/**
- * Detect CPU features at runtime. Safe to call from multiple threads.
- * Results are cached after first call.
- */
-TINYBLAKE_API const Features &detect();
+        /**
+         * Detect CPU features at runtime. Safe to call from multiple threads.
+         * Results are cached after first call.
+         */
+        TINYBLAKE_API const Features &detect();
 
-} /* namespace cpu */
+    } /* namespace cpu */
 } /* namespace tinyblake */
 
 #endif /* TINYBLAKE_CPU_FEATURES_H */

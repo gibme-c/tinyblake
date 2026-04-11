@@ -26,138 +26,219 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <tinyblake/blake2b.h>
-
 #include "backend/blake2b_compress.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <tinyblake/blake2b.h>
 
 /*
  * Fuzz target: cross-backend consistency.
- * Runs the portable compress and the runtime-dispatched compress on identical
- * inputs and asserts identical output. Would have caught the AVX2 alignment
- * crash.
  *
- * Input layout (minimum 153 bytes):
- *   [0..63]    — initial state (8 x uint64_t LE)
- *   [64..191]  — 128-byte message block
- *   [192]      — flags byte: bit 0 = last
+ * Two modes selected by the low bit of data[0]:
  *
- * Counter values are fixed at 128/0 to keep the test deterministic.
+ *   Mode 0 (bit 0 == 0): raw single-block compress differential.
+ *     Runs the portable compress path on one synthetic 128-B block with
+ *     one synthetic state and compares against the dispatched path via
+ *     the public API with the same state/block. Would have caught the
+ *     AVX2 alignment crash.
+ *
+ *   Mode 1 (bit 0 == 1): multi-block public-API differential, keyed or
+ *     unkeyed. Runs the public one-shot tinyblake_blake2b() (which uses
+ *     the runtime-dispatched compress) and compares against a
+ *     hand-rolled reference that drives blake2b_compress_portable
+ *     directly through the full update+final state machine for
+ *     arbitrary message lengths. Covers the update-buffer transitions
+ *     across backend boundaries plus the keyed-mode key-block prefix.
  */
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-  if (size < 193)
+
+static const uint64_t CROSS_IV[8] = {
+    0x6a09e667f3bcc908ULL,
+    0xbb67ae8584caa73bULL,
+    0x3c6ef372fe94f82bULL,
+    0xa54ff53a5f1d36f1ULL,
+    0x510e527fade682d1ULL,
+    0x9b05688c2b3e6c1fULL,
+    0x1f83d9abfb41bd6bULL,
+    0x5be0cd19137e2179ULL,
+};
+
+/*
+ * Hash (msg, key, outlen) by driving blake2b_compress_portable directly
+ * through the full update+final state machine. Mirrors the logic in
+ * src/blake2b.cpp exactly. Caller-supplied msglen is capped upstream so
+ * the 64-bit counter never wraps (t[1] stays zero).
+ */
+static void portable_reference_hash(
+    uint8_t *out,
+    size_t outlen,
+    const uint8_t *msg,
+    size_t msglen,
+    const uint8_t *key,
+    size_t keylen)
+{
+    uint8_t param[64];
+    std::memset(param, 0, 64);
+    param[0] = static_cast<uint8_t>(outlen);
+    param[1] = static_cast<uint8_t>(keylen);
+    param[2] = 1;
+    param[3] = 1;
+
+    uint64_t h[8];
+    for (int i = 0; i < 8; ++i)
+    {
+        uint64_t p = 0;
+        for (int b = 0; b < 8; ++b)
+            p |= static_cast<uint64_t>(param[i * 8 + b]) << (b * 8);
+        h[i] = CROSS_IV[i] ^ p;
+    }
+
+    /* Assemble (padded 128-B key block if keyed) || message into a stack
+     * scratch buffer. Caller caps msglen at 4096 so the total fits in 4224
+     * bytes, avoiding any heap allocation on this billions-of-iterations
+     * fuzzer hot path. */
+    uint8_t full[4096 + 128];
+    size_t total = 0;
+    if (keylen > 0)
+    {
+        std::memset(full, 0, 128);
+        std::memcpy(full, key, keylen);
+        total = 128;
+    }
+    std::memcpy(full + total, msg, msglen);
+    total += msglen;
+
+    uint64_t t0 = 0;
+    uint8_t block[128];
+
+    if (total == 0)
+    {
+        /* Unkeyed empty message: one compress on the zero block. */
+        std::memset(block, 0, 128);
+        tinyblake::blake2b_compress_portable(h, block, 0, 0, true);
+    }
+    else
+    {
+        size_t pos = 0;
+        /* Non-final blocks: every full 128-B chunk EXCEPT the last one.
+         * Mirrors `while (inlen > 128)` in src/blake2b.cpp. */
+        while (total - pos > 128)
+        {
+            t0 += 128;
+            tinyblake::blake2b_compress_portable(h, full + pos, t0, 0, false);
+            pos += 128;
+        }
+        /* Final block (possibly a partial chunk, possibly exactly 128). */
+        const size_t last_len = total - pos;
+        t0 += last_len;
+        std::memset(block, 0, 128);
+        std::memcpy(block, full + pos, last_len);
+        tinyblake::blake2b_compress_portable(h, block, t0, 0, true);
+    }
+
+    /* Extract the first outlen bytes of the digest, little-endian. */
+    uint8_t buf[64];
+    for (int i = 0; i < 8; ++i)
+        for (int b = 0; b < 8; ++b)
+            buf[i * 8 + b] = static_cast<uint8_t>(h[i] >> (b * 8));
+    std::memcpy(out, buf, outlen);
+}
+
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+{
+    if (size < 1)
+        return 0;
+
+    const bool mode1 = (data[0] & 1) != 0;
+
+    if (mode1)
+    {
+        /* Multi-block public-API differential, keyed or unkeyed. */
+        if (size < 4)
+            return 0;
+
+        size_t outlen = (data[1] % 64) + 1;
+        size_t keylen = data[2] % 65; /* 0 = unkeyed, 1..64 = keyed */
+
+        const uint8_t *rest = data + 3;
+        size_t restlen = size - 3;
+
+        if (keylen > restlen)
+            return 0;
+        const uint8_t *key = (keylen > 0) ? rest : nullptr;
+        rest += keylen;
+        restlen -= keylen;
+
+        /* Cap message length so the counter cannot wrap into t[1]. */
+        if (restlen > 4096)
+            restlen = 4096;
+
+        uint8_t out_pub[64];
+        int rc_pub = tinyblake_blake2b(out_pub, outlen, rest, restlen, key, keylen);
+        if (rc_pub != 0)
+            __builtin_trap();
+
+        uint8_t out_ref[64];
+        portable_reference_hash(out_ref, outlen, rest, restlen, key, keylen);
+
+        if (std::memcmp(out_pub, out_ref, outlen) != 0)
+            __builtin_trap();
+
+        return 0;
+    }
+
+    /* Mode 0: single-block differential. Hashes one 128-byte block via the
+     * public API (dispatched compress) and via a hand-rolled portable path,
+     * then asserts byte-equal outputs. */
+    if (size < 193)
+        return 0;
+
+    const uint8_t *block = data + 64;
+
+    /* Build a valid param block: outlen=64, fanout=1, depth=1 */
+    uint8_t param[64];
+    std::memset(param, 0, 64);
+    param[0] = 64; /* digest_length */
+    param[2] = 1; /* fanout */
+    param[3] = 1; /* depth */
+
+    /* State A: public API (dispatched compress) */
+    tinyblake_blake2b_state Sa;
+    tinyblake_blake2b_init_param(&Sa, param);
+    tinyblake_blake2b_update(&Sa, block, 128);
+    uint8_t out_a[64];
+    tinyblake_blake2b_final(&Sa, out_a, 64);
+
+    /* State B: portable compress, initialized from the same param block. */
+    uint64_t h[8];
+    for (int i = 0; i < 8; ++i)
+    {
+        uint64_t p = 0;
+        for (int b = 0; b < 8; ++b)
+        {
+            p |= static_cast<uint64_t>(param[i * 8 + b]) << (b * 8);
+        }
+        h[i] = CROSS_IV[i] ^ p;
+    }
+
+    uint8_t padded[128];
+    std::memcpy(padded, block, 128);
+    tinyblake::blake2b_compress_portable(h, padded, 128, 0, true);
+
+    /* Extract portable output */
+    uint8_t out_b[64];
+    for (int i = 0; i < 8; ++i)
+    {
+        for (int b = 0; b < 8; ++b)
+        {
+            out_b[i * 8 + b] = static_cast<uint8_t>(h[i] >> (b * 8));
+        }
+    }
+
+    /* Both must produce identical output */
+    if (std::memcmp(out_a, out_b, 64) != 0)
+        __builtin_trap();
+
     return 0;
-
-  /* Parse initial state from fuzz input */
-  uint64_t state_portable[8];
-  uint64_t state_dispatched[8];
-  for (int i = 0; i < 8; ++i) {
-    uint64_t v = 0;
-    for (int b = 0; b < 8; ++b) {
-      v |= static_cast<uint64_t>(data[i * 8 + b]) << (b * 8);
-    }
-    state_portable[i] = v;
-    state_dispatched[i] = v;
-  }
-
-  const uint8_t *block = data + 64;
-  bool last = (data[192] & 1) != 0;
-  uint64_t t0 = 128;
-  uint64_t t1 = 0;
-
-  /* Run portable backend */
-  tinyblake::blake2b_compress_portable(state_portable, block, t0, t1, last);
-
-  /* Run full BLAKE2b to exercise the dispatched backend with the same inputs.
-   * We construct a state manually and call update+final which internally
-   * calls the dispatched compress. Instead, we use the public API to hash
-   * the same block and compare at the compress level.
-   *
-   * Actually: we can call the dispatched compress directly by going through
-   * a full hash that exercises it. But the cleanest approach is to use
-   * the init_param path to set up identical initial state, then compare
-   * after one block compression.
-   *
-   * Simplest: just call both compress functions directly. The fuzz targets
-   * already have access to ../src via target_include_directories. */
-
-  /* Use the public API to get the dispatched compress result.
-   * We do this by setting up a state with init, manually overwriting h[],
-   * then calling update with exactly 128 bytes followed by final.
-   * But that changes counters. Instead, let's just exercise the dispatched
-   * compress directly — we have the header. */
-
-  /* The dispatched function is accessed via get_compress() which is static
-   * in blake2b.cpp. We can't call it directly. Instead, exercise the
-   * dispatched path through the public incremental API:
-   *
-   * 1. init with outlen=64
-   * 2. overwrite h[] with our fuzz state
-   * 3. feed 128+1 bytes (forces one compress of the first 128 bytes)
-   * 4. The compress uses the dispatched backend
-   *
-   * But the counter and last flag won't match. A cleaner approach:
-   * just hash the same message with both a portable-forced build and
-   * the dispatched build — but we can't force portable at runtime.
-   *
-   * Best approach for this fuzz target: compare full BLAKE2b hash output
-   * using portable compress vs dispatched compress by running the full
-   * hash algorithm manually with each. */
-
-  /* Direct comparison: init identical states, process the same message,
-   * and compare final output. Use init_param to set up both states
-   * identically, then the dispatched path via the public API. */
-
-  /* Build a valid param block: outlen=64, fanout=1, depth=1 */
-  uint8_t param[64];
-  std::memset(param, 0, 64);
-  param[0] = 64; /* digest_length */
-  param[2] = 1;  /* fanout */
-  param[3] = 1;  /* depth */
-
-  /* State A: use public API (dispatched compress) */
-  tinyblake_blake2b_state Sa;
-  tinyblake_blake2b_init_param(&Sa, param);
-  tinyblake_blake2b_update(&Sa, block, 128);
-  uint8_t out_a[64];
-  tinyblake_blake2b_final(&Sa, out_a, 64);
-
-  /* State B: use portable compress manually */
-  uint64_t h[8];
-  static const uint64_t IV[8] = {
-      0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL, 0x3c6ef372fe94f82bULL,
-      0xa54ff53a5f1d36f1ULL, 0x510e527fade682d1ULL, 0x9b05688c2b3e6c1fULL,
-      0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL,
-  };
-
-  /* XOR IV with param block (same as init_from_param) */
-  for (int i = 0; i < 8; ++i) {
-    uint64_t p = 0;
-    for (int b = 0; b < 8; ++b) {
-      p |= static_cast<uint64_t>(param[i * 8 + b]) << (b * 8);
-    }
-    h[i] = IV[i] ^ p;
-  }
-
-  /* Process the 128-byte block as the only data (counter = 128, last = true) */
-  uint8_t padded[128];
-  std::memcpy(padded, block, 128);
-  tinyblake::blake2b_compress_portable(h, padded, 128, 0, true);
-
-  /* Extract portable output */
-  uint8_t out_b[64];
-  for (int i = 0; i < 8; ++i) {
-    for (int b = 0; b < 8; ++b) {
-      out_b[i * 8 + b] = static_cast<uint8_t>(h[i] >> (b * 8));
-    }
-  }
-
-  /* Both must produce identical output */
-  if (std::memcmp(out_a, out_b, 64) != 0)
-    __builtin_trap();
-
-  return 0;
 }

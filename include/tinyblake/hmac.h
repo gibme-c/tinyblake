@@ -36,28 +36,31 @@
 #include <cstdint>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-/**
- * HMAC-BLAKE2b-512 (block size = 128 bytes).
- */
-typedef struct tinyblake_hmac_state {
-  tinyblake_blake2b_state inner;
-  tinyblake_blake2b_state outer;
-} tinyblake_hmac_state;
+    /**
+     * HMAC-BLAKE2b-512 (block size = 128 bytes).
+     *
+     * This implementation rejects empty keys (keylen == 0). RFC 2104
+     * recommends but does not mandate a minimum key length; the rejection
+     * is a hardening tightening.
+     */
+    typedef struct tinyblake_hmac_state
+    {
+        tinyblake_blake2b_state inner;
+        tinyblake_blake2b_state outer;
+    } tinyblake_hmac_state;
 
-TINYBLAKE_API int tinyblake_hmac_init(tinyblake_hmac_state *state,
-                                      const void *key, size_t keylen);
+    TINYBLAKE_API int tinyblake_hmac_init(tinyblake_hmac_state *state, const void *key, size_t keylen);
 
-TINYBLAKE_API int tinyblake_hmac_update(tinyblake_hmac_state *state,
-                                        const void *in, size_t inlen);
+    TINYBLAKE_API int tinyblake_hmac_update(tinyblake_hmac_state *state, const void *in, size_t inlen);
 
-TINYBLAKE_API int tinyblake_hmac_final(tinyblake_hmac_state *state, void *out,
-                                       size_t outlen);
+    TINYBLAKE_API int tinyblake_hmac_final(tinyblake_hmac_state *state, void *out, size_t outlen);
 
-TINYBLAKE_API int tinyblake_hmac(void *out, size_t outlen, const void *key,
-                                 size_t keylen, const void *in, size_t inlen);
+    TINYBLAKE_API int
+        tinyblake_hmac(void *out, size_t outlen, const void *key, size_t keylen, const void *in, size_t inlen);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -68,41 +71,48 @@ TINYBLAKE_API int tinyblake_hmac(void *out, size_t outlen, const void *key,
 #include <string>
 #include <vector>
 
-namespace tinyblake::hmac {
+namespace tinyblake::hmac
+{
 
-inline constexpr size_t DIGEST_BYTES = 64;
-inline constexpr size_t BLOCK_BYTES = 128;
+    inline constexpr size_t DIGEST_BYTES = 64;
+    inline constexpr size_t BLOCK_BYTES = 128;
 
-class TINYBLAKE_API hasher {
-public:
-  hasher(const void *key, size_t keylen);
-  explicit hasher(const std::vector<uint8_t> &key);
-  ~hasher();
+    /**
+     * HMAC-BLAKE2b-512 C++ wrapper.
+     *
+     * Rejects empty keys (keylen == 0). RFC 2104 recommends but does not
+     * mandate a minimum key length; the rejection is a hardening tightening.
+     */
+    class TINYBLAKE_API hasher
+    {
+      public:
+        hasher(const void *key, size_t keylen);
+        explicit hasher(const std::vector<uint8_t> &key);
+        ~hasher();
 
-  hasher(const hasher &) = delete;
-  hasher &operator=(const hasher &) = delete;
+        hasher(const hasher &) = delete;
+        hasher &operator=(const hasher &) = delete;
 
-  hasher(hasher &&) noexcept;
-  hasher &operator=(hasher &&) noexcept;
+        hasher(hasher &&) noexcept;
+        hasher &operator=(hasher &&) noexcept;
 
-  void update(const void *data, size_t len);
-  void update(const std::vector<uint8_t> &data);
-  void update(const std::string &data);
+        void update(const void *data, size_t len);
+        void update(const std::vector<uint8_t> &data);
+        void update(const std::string &data);
 
-  std::vector<uint8_t> final_();
-  void final_(void *out, size_t outlen);
+        std::vector<uint8_t> final_();
+        void final_(void *out, size_t outlen);
 
-  void reset();
+        void reset();
 
-private:
-  tinyblake_hmac_state state_;
-  uint8_t key_pad_[128]; /* for reset: stores the (hashed) key */
-};
+      private:
+        tinyblake_hmac_state state_;
+        uint8_t key_pad_[128]; /* for reset: stores the (hashed) key */
+    };
 
-/* ─── One-shot free function ─── */
+    /* ─── One-shot free function ─── */
 
-TINYBLAKE_API std::vector<uint8_t> mac(const void *key, size_t keylen,
-                                       const void *data, size_t datalen);
+    TINYBLAKE_API std::vector<uint8_t> mac(const void *key, size_t keylen, const void *data, size_t datalen);
 
 } /* namespace tinyblake::hmac */
 

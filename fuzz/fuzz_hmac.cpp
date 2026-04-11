@@ -26,59 +26,61 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <tinyblake/hmac.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <tinyblake/hmac.h>
 
 /*
  * Fuzz target: HMAC-BLAKE2b-512.
  * Differential test: one-shot vs incremental HMAC.
  */
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-  if (size < 2)
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+{
+    if (size < 2)
+        return 0;
+
+    /* Byte 0: key length hint */
+    size_t keylen = (data[0] % 128) + 1;
+    const uint8_t *rest = data + 1;
+    size_t restlen = size - 1;
+
+    if (restlen < keylen)
+    {
+        keylen = restlen;
+    }
+    if (keylen == 0)
+        return 0;
+
+    const uint8_t *key = rest;
+    const uint8_t *msg = rest + keylen;
+    size_t msglen = restlen - keylen;
+
+    /* One-shot */
+    uint8_t out1[64];
+    int rc1 = tinyblake_hmac(out1, 64, key, keylen, msg, msglen);
+
+    /* Incremental */
+    tinyblake_hmac_state state;
+    tinyblake_hmac_init(&state, key, keylen);
+
+    size_t off = 0;
+    while (off < msglen)
+    {
+        size_t n = 1;
+        if (off + n > msglen)
+            n = msglen - off;
+        tinyblake_hmac_update(&state, msg + off, n);
+        off += n;
+    }
+
+    uint8_t out2[64];
+    int rc2 = tinyblake_hmac_final(&state, out2, 64);
+
+    if (rc1 != 0 || rc2 != 0)
+        __builtin_trap();
+    if (std::memcmp(out1, out2, 64) != 0)
+        __builtin_trap();
+
     return 0;
-
-  /* Byte 0: key length hint */
-  size_t keylen = (data[0] % 128) + 1;
-  const uint8_t *rest = data + 1;
-  size_t restlen = size - 1;
-
-  if (restlen < keylen) {
-    keylen = restlen;
-  }
-  if (keylen == 0)
-    return 0;
-
-  const uint8_t *key = rest;
-  const uint8_t *msg = rest + keylen;
-  size_t msglen = restlen - keylen;
-
-  /* One-shot */
-  uint8_t out1[64];
-  int rc1 = tinyblake_hmac(out1, 64, key, keylen, msg, msglen);
-
-  /* Incremental */
-  tinyblake_hmac_state state;
-  tinyblake_hmac_init(&state, key, keylen);
-
-  size_t off = 0;
-  while (off < msglen) {
-    size_t n = 1;
-    if (off + n > msglen)
-      n = msglen - off;
-    tinyblake_hmac_update(&state, msg + off, n);
-    off += n;
-  }
-
-  uint8_t out2[64];
-  int rc2 = tinyblake_hmac_final(&state, out2, 64);
-
-  if (rc1 != 0 || rc2 != 0)
-    __builtin_trap();
-  if (std::memcmp(out1, out2, 64) != 0)
-    __builtin_trap();
-
-  return 0;
 }

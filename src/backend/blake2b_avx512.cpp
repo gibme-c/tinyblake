@@ -39,116 +39,143 @@
  * Required: AVX-512F + AVX-512VL + AVX-512VBMI2 (Ice Lake+, Zen 4+).
  */
 
-#if (defined(__x86_64__) || defined(_M_X64)) &&                                \
-    (defined(__AVX512VL__) || defined(__GNUC__) || defined(_MSC_VER))
+#if (defined(__x86_64__) || defined(_M_X64)) && (defined(__AVX512VL__) || defined(__GNUC__) || defined(_MSC_VER))
 
 #include "../internal/endian.h"
+
 #include <immintrin.h>
 
-namespace tinyblake {
+namespace tinyblake
+{
 
-static const uint64_t IV[8] = {0x6A09E667F3BCC908ULL, 0xBB67AE8584CAA73BULL,
-                               0x3C6EF372FE94F82BULL, 0xA54FF53A5F1D36F1ULL,
-                               0x510E527FADE682D1ULL, 0x9B05688C2B3E6C1FULL,
-                               0x1F83D9ABFB41BD6BULL, 0x5BE0CD19137E2179ULL};
+    static const uint64_t IV[8] = {
+        0x6A09E667F3BCC908ULL,
+        0xBB67AE8584CAA73BULL,
+        0x3C6EF372FE94F82BULL,
+        0xA54FF53A5F1D36F1ULL,
+        0x510E527FADE682D1ULL,
+        0x9B05688C2B3E6C1FULL,
+        0x1F83D9ABFB41BD6BULL,
+        0x5BE0CD19137E2179ULL};
 
-static const uint8_t SIGMA[12][16] = {
-    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
-    {14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3},
-    {11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4},
-    {7, 9, 3, 1, 13, 12, 11, 14, 2, 6, 5, 10, 4, 0, 15, 8},
-    {9, 0, 5, 7, 2, 4, 10, 15, 14, 1, 11, 12, 6, 8, 3, 13},
-    {2, 12, 6, 10, 0, 11, 8, 3, 4, 13, 7, 5, 15, 14, 1, 9},
-    {12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11},
-    {13, 11, 7, 14, 12, 1, 3, 9, 5, 0, 15, 4, 8, 6, 2, 10},
-    {6, 15, 14, 9, 11, 3, 0, 8, 12, 2, 13, 7, 1, 4, 10, 5},
-    {10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0},
-    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
-    {14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3},
-};
+    static const uint8_t SIGMA[12][16] = {
+        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+        {14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3},
+        {11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4},
+        {7, 9, 3, 1, 13, 12, 11, 14, 2, 6, 5, 10, 4, 0, 15, 8},
+        {9, 0, 5, 7, 2, 4, 10, 15, 14, 1, 11, 12, 6, 8, 3, 13},
+        {2, 12, 6, 10, 0, 11, 8, 3, 4, 13, 7, 5, 15, 14, 1, 9},
+        {12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11},
+        {13, 11, 7, 14, 12, 1, 3, 9, 5, 0, 15, 4, 8, 6, 2, 10},
+        {6, 15, 14, 9, 11, 3, 0, 8, 12, 2, 13, 7, 1, 4, 10, 5},
+        {10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0},
+        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+        {14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3},
+    };
 
-/* Diagonalize: rotate rows for diagonal mixing step */
-static inline void diag(__m256i &row2, __m256i &row3, __m256i &row4) {
-  row2 = _mm256_permute4x64_epi64(row2, _MM_SHUFFLE(0, 3, 2, 1));
-  row3 = _mm256_permute4x64_epi64(row3, _MM_SHUFFLE(1, 0, 3, 2));
-  row4 = _mm256_permute4x64_epi64(row4, _MM_SHUFFLE(2, 1, 0, 3));
-}
+    /* Diagonalize: rotate rows for diagonal mixing step */
+    static inline void diag(__m256i &row2, __m256i &row3, __m256i &row4)
+    {
+        row2 = _mm256_permute4x64_epi64(row2, _MM_SHUFFLE(0, 3, 2, 1));
+        row3 = _mm256_permute4x64_epi64(row3, _MM_SHUFFLE(1, 0, 3, 2));
+        row4 = _mm256_permute4x64_epi64(row4, _MM_SHUFFLE(2, 1, 0, 3));
+    }
 
-/* Undiagonalize: reverse the row rotation */
-static inline void undiag(__m256i &row2, __m256i &row3, __m256i &row4) {
-  row2 = _mm256_permute4x64_epi64(row2, _MM_SHUFFLE(2, 1, 0, 3));
-  row3 = _mm256_permute4x64_epi64(row3, _MM_SHUFFLE(1, 0, 3, 2));
-  row4 = _mm256_permute4x64_epi64(row4, _MM_SHUFFLE(0, 3, 2, 1));
-}
+    /* Undiagonalize: reverse the row rotation */
+    static inline void undiag(__m256i &row2, __m256i &row3, __m256i &row4)
+    {
+        row2 = _mm256_permute4x64_epi64(row2, _MM_SHUFFLE(2, 1, 0, 3));
+        row3 = _mm256_permute4x64_epi64(row3, _MM_SHUFFLE(1, 0, 3, 2));
+        row4 = _mm256_permute4x64_epi64(row4, _MM_SHUFFLE(0, 3, 2, 1));
+    }
 
-static inline void g_column(__m256i &a, __m256i &b, __m256i &c, __m256i &d,
-                            __m256i mx, __m256i my, __m256i rot32,
-                            __m256i rot24, __m256i rot16, __m256i rot63) {
-  a = _mm256_add_epi64(_mm256_add_epi64(a, b), mx);
-  d = _mm256_rorv_epi64(_mm256_xor_si256(d, a), rot32);
-  c = _mm256_add_epi64(c, d);
-  b = _mm256_rorv_epi64(_mm256_xor_si256(b, c), rot24);
-  a = _mm256_add_epi64(_mm256_add_epi64(a, b), my);
-  d = _mm256_rorv_epi64(_mm256_xor_si256(d, a), rot16);
-  c = _mm256_add_epi64(c, d);
-  b = _mm256_rorv_epi64(_mm256_xor_si256(b, c), rot63);
-}
+    static inline void g_column(
+        __m256i &a,
+        __m256i &b,
+        __m256i &c,
+        __m256i &d,
+        __m256i mx,
+        __m256i my,
+        __m256i rot32,
+        __m256i rot24,
+        __m256i rot16,
+        __m256i rot63)
+    {
+        a = _mm256_add_epi64(_mm256_add_epi64(a, b), mx);
+        d = _mm256_rorv_epi64(_mm256_xor_si256(d, a), rot32);
+        c = _mm256_add_epi64(c, d);
+        b = _mm256_rorv_epi64(_mm256_xor_si256(b, c), rot24);
+        a = _mm256_add_epi64(_mm256_add_epi64(a, b), my);
+        d = _mm256_rorv_epi64(_mm256_xor_si256(d, a), rot16);
+        c = _mm256_add_epi64(c, d);
+        b = _mm256_rorv_epi64(_mm256_xor_si256(b, c), rot63);
+    }
 
-void blake2b_compress_avx512(uint64_t state[8], const uint8_t block[128],
-                             uint64_t t0, uint64_t t1, bool last) {
-  uint64_t m[16];
-  for (int i = 0; i < 16; ++i) {
-    m[i] = detail::load_le64(block + i * 8);
-  }
+    void blake2b_compress_avx512(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last)
+    {
+        uint64_t m[16];
+        for (int i = 0; i < 16; ++i)
+        {
+            m[i] = detail::load_le64(block + i * 8);
+        }
 
-  /* Rotation constants — each lane holds the same shift amount */
-  const __m256i rot32 = _mm256_set1_epi64x(32);
-  const __m256i rot24 = _mm256_set1_epi64x(24);
-  const __m256i rot16 = _mm256_set1_epi64x(16);
-  const __m256i rot63 = _mm256_set1_epi64x(63);
+        /* Rotation constants — each lane holds the same shift amount */
+        const __m256i rot32 = _mm256_set1_epi64x(32);
+        const __m256i rot24 = _mm256_set1_epi64x(24);
+        const __m256i rot16 = _mm256_set1_epi64x(16);
+        const __m256i rot63 = _mm256_set1_epi64x(63);
 
-  __m256i row1 = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(state));
-  __m256i row2 =
-      _mm256_loadu_si256(reinterpret_cast<const __m256i *>(state + 4));
-  __m256i row3 = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(IV));
-  __m256i row4 = _mm256_set_epi64x(
-      static_cast<int64_t>(IV[7]),
-      static_cast<int64_t>(last ? (IV[6] ^ 0xFFFFFFFFFFFFFFFFULL) : IV[6]),
-      static_cast<int64_t>(IV[5] ^ t1), static_cast<int64_t>(IV[4] ^ t0));
+        __m256i row1 = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(state));
+        __m256i row2 = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(state + 4));
+        __m256i row3 = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(IV));
+        __m256i row4 = _mm256_set_epi64x(
+            static_cast<int64_t>(IV[7]),
+            static_cast<int64_t>(last ? (IV[6] ^ 0xFFFFFFFFFFFFFFFFULL) : IV[6]),
+            static_cast<int64_t>(IV[5] ^ t1),
+            static_cast<int64_t>(IV[4] ^ t0));
 
-  __m256i orig1 = row1;
-  __m256i orig2 = row2;
+        __m256i orig1 = row1;
+        __m256i orig2 = row2;
 
-  for (int r = 0; r < 12; ++r) {
-    const uint8_t *s = SIGMA[r];
+        for (int r = 0; r < 12; ++r)
+        {
+            const uint8_t *s = SIGMA[r];
 
-    /* Column step */
-    __m256i mx = _mm256_set_epi64x(
-        static_cast<int64_t>(m[s[6]]), static_cast<int64_t>(m[s[4]]),
-        static_cast<int64_t>(m[s[2]]), static_cast<int64_t>(m[s[0]]));
-    __m256i my = _mm256_set_epi64x(
-        static_cast<int64_t>(m[s[7]]), static_cast<int64_t>(m[s[5]]),
-        static_cast<int64_t>(m[s[3]]), static_cast<int64_t>(m[s[1]]));
-    g_column(row1, row2, row3, row4, mx, my, rot32, rot24, rot16, rot63);
+            /* Column step */
+            __m256i mx = _mm256_set_epi64x(
+                static_cast<int64_t>(m[s[6]]),
+                static_cast<int64_t>(m[s[4]]),
+                static_cast<int64_t>(m[s[2]]),
+                static_cast<int64_t>(m[s[0]]));
+            __m256i my = _mm256_set_epi64x(
+                static_cast<int64_t>(m[s[7]]),
+                static_cast<int64_t>(m[s[5]]),
+                static_cast<int64_t>(m[s[3]]),
+                static_cast<int64_t>(m[s[1]]));
+            g_column(row1, row2, row3, row4, mx, my, rot32, rot24, rot16, rot63);
 
-    /* Diagonal step */
-    diag(row2, row3, row4);
-    mx = _mm256_set_epi64x(
-        static_cast<int64_t>(m[s[14]]), static_cast<int64_t>(m[s[12]]),
-        static_cast<int64_t>(m[s[10]]), static_cast<int64_t>(m[s[8]]));
-    my = _mm256_set_epi64x(
-        static_cast<int64_t>(m[s[15]]), static_cast<int64_t>(m[s[13]]),
-        static_cast<int64_t>(m[s[11]]), static_cast<int64_t>(m[s[9]]));
-    g_column(row1, row2, row3, row4, mx, my, rot32, rot24, rot16, rot63);
-    undiag(row2, row3, row4);
-  }
+            /* Diagonal step */
+            diag(row2, row3, row4);
+            mx = _mm256_set_epi64x(
+                static_cast<int64_t>(m[s[14]]),
+                static_cast<int64_t>(m[s[12]]),
+                static_cast<int64_t>(m[s[10]]),
+                static_cast<int64_t>(m[s[8]]));
+            my = _mm256_set_epi64x(
+                static_cast<int64_t>(m[s[15]]),
+                static_cast<int64_t>(m[s[13]]),
+                static_cast<int64_t>(m[s[11]]),
+                static_cast<int64_t>(m[s[9]]));
+            g_column(row1, row2, row3, row4, mx, my, rot32, rot24, rot16, rot63);
+            undiag(row2, row3, row4);
+        }
 
-  row1 = _mm256_xor_si256(_mm256_xor_si256(row1, row3), orig1);
-  row2 = _mm256_xor_si256(_mm256_xor_si256(row2, row4), orig2);
+        row1 = _mm256_xor_si256(_mm256_xor_si256(row1, row3), orig1);
+        row2 = _mm256_xor_si256(_mm256_xor_si256(row2, row4), orig2);
 
-  _mm256_storeu_si256(reinterpret_cast<__m256i *>(state), row1);
-  _mm256_storeu_si256(reinterpret_cast<__m256i *>(state + 4), row2);
-}
+        _mm256_storeu_si256(reinterpret_cast<__m256i *>(state), row1);
+        _mm256_storeu_si256(reinterpret_cast<__m256i *>(state + 4), row2);
+    }
 
 } /* namespace tinyblake */
 
@@ -156,12 +183,13 @@ void blake2b_compress_avx512(uint64_t state[8], const uint8_t block[128],
 
 #include "blake2b_compress.h"
 
-namespace tinyblake {
+namespace tinyblake
+{
 
-void blake2b_compress_avx512(uint64_t state[8], const uint8_t block[128],
-                             uint64_t t0, uint64_t t1, bool last) {
-  blake2b_compress_portable(state, block, t0, t1, last);
-}
+    void blake2b_compress_avx512(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last)
+    {
+        blake2b_compress_portable(state, block, t0, t1, last);
+    }
 
 } /* namespace tinyblake */
 

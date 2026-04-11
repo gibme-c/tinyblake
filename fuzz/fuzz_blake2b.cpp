@@ -26,49 +26,50 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <tinyblake/blake2b.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <tinyblake/blake2b.h>
 
 /*
  * Fuzz target: unkeyed BLAKE2b.
  * Differential test: one-shot vs incremental with random split point.
  */
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-  if (size < 1)
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+{
+    if (size < 1)
+        return 0;
+
+    /* Use first byte to determine output length (1..64) */
+    size_t outlen = (data[0] % 64) + 1;
+    const uint8_t *msg = data + 1;
+    size_t msglen = size - 1;
+
+    /* One-shot */
+    uint8_t out1[64];
+    int rc1 = tinyblake_blake2b(out1, outlen, msg, msglen, nullptr, 0);
+
+    /* Incremental */
+    tinyblake_blake2b_state S;
+    tinyblake_blake2b_init(&S, outlen);
+
+    if (msglen > 0)
+    {
+        size_t split = (data[0] % msglen) + 1;
+        if (split > msglen)
+            split = msglen;
+        tinyblake_blake2b_update(&S, msg, split);
+        tinyblake_blake2b_update(&S, msg + split, msglen - split);
+    }
+
+    uint8_t out2[64];
+    int rc2 = tinyblake_blake2b_final(&S, out2, outlen);
+
+    /* Both must succeed and produce identical output */
+    if (rc1 != 0 || rc2 != 0)
+        __builtin_trap();
+    if (std::memcmp(out1, out2, outlen) != 0)
+        __builtin_trap();
+
     return 0;
-
-  /* Use first byte to determine output length (1..64) */
-  size_t outlen = (data[0] % 64) + 1;
-  const uint8_t *msg = data + 1;
-  size_t msglen = size - 1;
-
-  /* One-shot */
-  uint8_t out1[64];
-  int rc1 = tinyblake_blake2b(out1, outlen, msg, msglen, nullptr, 0);
-
-  /* Incremental */
-  tinyblake_blake2b_state S;
-  tinyblake_blake2b_init(&S, outlen);
-
-  if (msglen > 0) {
-    size_t split = (data[0] % msglen) + 1;
-    if (split > msglen)
-      split = msglen;
-    tinyblake_blake2b_update(&S, msg, split);
-    tinyblake_blake2b_update(&S, msg + split, msglen - split);
-  }
-
-  uint8_t out2[64];
-  int rc2 = tinyblake_blake2b_final(&S, out2, outlen);
-
-  /* Both must succeed and produce identical output */
-  if (rc1 != 0 || rc2 != 0)
-    __builtin_trap();
-  if (std::memcmp(out1, out2, outlen) != 0)
-    __builtin_trap();
-
-  return 0;
 }

@@ -6,6 +6,8 @@ add_executable(tinyblake_tests
     test_truncation.cpp
     test_params.cpp
     test_cpuid.cpp
+    test_secure_zero.cpp
+    test_edge_cases.cpp
 )
 
 target_link_libraries(tinyblake_tests PRIVATE tinyblake)

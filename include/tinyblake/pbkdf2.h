@@ -35,25 +35,37 @@
 #include <cstdint>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-/**
- * PBKDF2-HMAC-BLAKE2b-512.
- *
- * @param out       Output derived key buffer.
- * @param outlen    Desired derived key length in bytes.
- * @param password  Password bytes.
- * @param passlen   Password length.
- * @param salt      Salt bytes.
- * @param saltlen   Salt length.
- * @param rounds    Iteration count (must be >= 1).
- * @return 0 on success, -1 on error.
- */
-TINYBLAKE_API int tinyblake_pbkdf2(void *out, size_t outlen,
-                                   const void *password, size_t passlen,
-                                   const void *salt, size_t saltlen,
-                                   uint32_t rounds);
+    /**
+     * PBKDF2-HMAC-BLAKE2b-512.
+     *
+     * @param out       Output derived key buffer.
+     * @param outlen    Desired derived key length in bytes.
+     * @param password  Password bytes.
+     * @param passlen   Password length.
+     * @param salt      Salt bytes.
+     * @param saltlen   Salt length.
+     * @param rounds    Iteration count (must be >= 1).
+     * @return 0 on success, -1 on error.
+     *
+     * RFC 8018 §5.2 cites NIST SP 800-132 recommending a minimum of 1000
+     * iterations. For password storage, OWASP (2024) recommends >= 600,000
+     * with PBKDF2-HMAC-SHA256 on modern hardware; BLAKE2b-512 is roughly
+     * comparable. This function accepts any rounds >= 1 because tinyblake
+     * is a KDF primitive, not a password-hashing wrapper — callers choose
+     * iteration counts appropriate for their threat model.
+     */
+    TINYBLAKE_API int tinyblake_pbkdf2(
+        void *out,
+        size_t outlen,
+        const void *password,
+        size_t passlen,
+        const void *salt,
+        size_t saltlen,
+        uint32_t rounds);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -64,28 +76,27 @@ TINYBLAKE_API int tinyblake_pbkdf2(void *out, size_t outlen,
 #include <string>
 #include <vector>
 
-namespace tinyblake::pbkdf2 {
+namespace tinyblake::pbkdf2
+{
 
-inline constexpr size_t PRF_OUTPUT_BYTES = 64; /* HMAC-BLAKE2b-512 */
+    inline constexpr size_t PRF_OUTPUT_BYTES = 64; /* HMAC-BLAKE2b-512 */
 
-/**
- * Derive a key from a password.
- *
- * @param password  Password bytes.
- * @param passlen   Password length.
- * @param salt      Salt bytes.
- * @param saltlen   Salt length.
- * @param rounds    Iteration count.
- * @param outlen    Desired key length.
- * @return Derived key bytes.
- */
-TINYBLAKE_API std::vector<uint8_t> derive(const void *password, size_t passlen,
-                                          const void *salt, size_t saltlen,
-                                          uint32_t rounds, size_t outlen);
+    /**
+     * Derive a key from a password.
+     *
+     * @param password  Password bytes.
+     * @param passlen   Password length.
+     * @param salt      Salt bytes.
+     * @param saltlen   Salt length.
+     * @param rounds    Iteration count.
+     * @param outlen    Desired key length.
+     * @return Derived key bytes.
+     */
+    TINYBLAKE_API std::vector<uint8_t>
+        derive(const void *password, size_t passlen, const void *salt, size_t saltlen, uint32_t rounds, size_t outlen);
 
-TINYBLAKE_API std::vector<uint8_t> derive(const std::string &password,
-                                          const std::vector<uint8_t> &salt,
-                                          uint32_t rounds, size_t outlen);
+    TINYBLAKE_API std::vector<uint8_t>
+        derive(const std::string &password, const std::vector<uint8_t> &salt, uint32_t rounds, size_t outlen);
 
 } /* namespace tinyblake::pbkdf2 */
 

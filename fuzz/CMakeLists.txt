@@ -16,7 +16,9 @@ set(FUZZ_TARGETS
     fuzz_blake2b_param
     fuzz_cross_backend
     fuzz_hmac
+    fuzz_hmac_misuse
     fuzz_pbkdf2
+    fuzz_reset
 )
 
 foreach(target ${FUZZ_TARGETS})

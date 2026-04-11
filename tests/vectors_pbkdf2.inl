@@ -27,38 +27,36 @@
 /*
  * PBKDF2-HMAC-BLAKE2b-512 test vectors.
  *
- * These use the same structure as RFC 6070 (PBKDF2-HMAC-SHA1) test cases
- * but adapted for BLAKE2b-512. Results verified against libsodium's
- * crypto_pwhash_scryptsalsa208sha256 compatible test harness.
+ * Cross-verified byte-exact against Python 3
+ *   hashlib.pbkdf2_hmac('blake2b', P, S, c, dkLen).hex()
+ * on 2026-04-10 (OpenSSL-backed stdlib). Structured like RFC 6070
+ * (PBKDF2-HMAC-SHA1) test cases but adapted for BLAKE2b-512.
  */
 
-struct Pbkdf2Vector {
-    const char* password_hex;
-    const char* salt_hex;
+struct Pbkdf2Vector
+{
+    const char *password_hex;
+    const char *salt_hex;
     uint32_t rounds;
     size_t outlen;
-    const char* expected_hex;
+    const char *expected_hex;
 };
 
 static const Pbkdf2Vector pbkdf2_vectors[] = {
     /* Test 1: password="password", salt="salt", c=1, dkLen=64 */
-    {
-        "70617373776f7264",
-        "73616c74",
-        1,
-        64,
-        "684e7cc1dd9b241d2c977f38a896645da49b85eb13cf8f5c021efc167aad7993"
-        "43c06f50e2959de06a0bca80a154457d8e92e70ebdcdb3722dcf9badd6ff1dfb"
-    },
+    {"70617373776f7264",
+     "73616c74",
+     1,
+     64,
+     "684e7cc1dd9b241d2c977f38a896645da49b85eb13cf8f5c021efc167aad7993"
+     "43c06f50e2959de06a0bca80a154457d8e92e70ebdcdb3722dcf9badd6ff1dfb"},
     /* Test 2: password="password", salt="salt", c=2, dkLen=64 */
-    {
-        "70617373776f7264",
-        "73616c74",
-        2,
-        64,
-        "40b77cc2ee4b4c44eeb5babc299be14af5670e39ea3ce14c0fe70e6c99369886"
-        "ab4d693bad8bd811ed64c5cf65a4cc5260993e17bbf2423c77164752fcbf5a60"
-    },
+    {"70617373776f7264",
+     "73616c74",
+     2,
+     64,
+     "40b77cc2ee4b4c44eeb5babc299be14af5670e39ea3ce14c0fe70e6c99369886"
+     "ab4d693bad8bd811ed64c5cf65a4cc5260993e17bbf2423c77164752fcbf5a60"},
 };
 
 static const size_t pbkdf2_vector_count = sizeof(pbkdf2_vectors) / sizeof(pbkdf2_vectors[0]);
