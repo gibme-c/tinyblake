@@ -106,8 +106,11 @@ static void portable_reference_hash(
         std::memcpy(full, key, keylen);
         total = 128;
     }
-    std::memcpy(full + total, msg, msglen);
-    total += msglen;
+    if (msglen > 0)
+    {
+        std::memcpy(full + total, msg, msglen);
+        total += msglen;
+    }
 
     uint64_t t0 = 0;
     uint8_t block[128];

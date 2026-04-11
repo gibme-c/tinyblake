@@ -7,11 +7,28 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+# Detect whether tinyblake is the top-level project or consumed via
+# add_subdirectory(). When consumed, we never build tests/benches/fuzzers —
+# those are for tinyblake's own development, not for downstream consumers.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(TINYBLAKE_IS_TOP_LEVEL ON)
+else()
+    set(TINYBLAKE_IS_TOP_LEVEL OFF)
+endif()
+
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
-option(BUILD_TESTS "Build unit tests" OFF)
-option(BUILD_BENCH "Build benchmarks" OFF)
-option(BUILD_FUZZ "Build fuzz targets" OFF)
-option(FORCE_PORTABLE "Disable SIMD backends; use only portable code" OFF)
+option(TINYBLAKE_BUILD_TESTS "Build tinyblake unit tests" OFF)
+option(TINYBLAKE_BUILD_BENCH "Build tinyblake benchmarks" OFF)
+option(TINYBLAKE_BUILD_FUZZ  "Build tinyblake fuzz targets" OFF)
+option(TINYBLAKE_FORCE_PORTABLE "Disable SIMD backends; use only portable code" OFF)
+
+set(TINYBLAKE_SANITIZER "" CACHE STRING
+    "Enable a sanitizer build: asan, ubsan, asan-ubsan, tsan, or msan (GCC/Clang only)")
+set_property(CACHE TINYBLAKE_SANITIZER PROPERTY STRINGS
+    "" "asan" "ubsan" "asan-ubsan" "tsan" "msan")
+
+# Alias the old flag name so existing callers keep working within this project.
+set(FORCE_PORTABLE ${TINYBLAKE_FORCE_PORTABLE})
 
 # --- Library sources ---
 set(TINYBLAKE_SOURCES
@@ -119,8 +136,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
             $<$<CONFIG:Debug>:-D_GLIBCXX_ASSERTIONS>
         )
     endif()
-    # _FORTIFY_SOURCE requires optimization; not reliably supported on MinGW
-    if(NOT WIN32)
+    # _FORTIFY_SOURCE requires optimization; not reliably supported on MinGW.
+    # Also incompatible with sanitizers — ASan/TSan/MSan trigger spurious
+    # aborts on fortified calls, so we skip it whenever a sanitizer is on.
+    if(NOT WIN32 AND NOT TINYBLAKE_SANITIZER)
         target_compile_options(tinyblake PRIVATE
             $<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=2>
         )
@@ -161,6 +180,40 @@ elseif(MSVC)
     endif()
 endif()
 
+# --- Sanitizer support ---
+# Applied as PUBLIC because sanitizer flags must propagate across every
+# translation unit linked into the final binary. Consumers never see these
+# flags unless they explicitly set TINYBLAKE_SANITIZER at configure time.
+if(TINYBLAKE_SANITIZER)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(FATAL_ERROR "TINYBLAKE_SANITIZER is only supported with GCC/Clang")
+    endif()
+    if(TINYBLAKE_SANITIZER STREQUAL "asan")
+        set(_TINYBLAKE_SAN_LIST "address")
+    elseif(TINYBLAKE_SANITIZER STREQUAL "ubsan")
+        set(_TINYBLAKE_SAN_LIST "undefined")
+    elseif(TINYBLAKE_SANITIZER STREQUAL "asan-ubsan")
+        set(_TINYBLAKE_SAN_LIST "address,undefined")
+    elseif(TINYBLAKE_SANITIZER STREQUAL "tsan")
+        set(_TINYBLAKE_SAN_LIST "thread")
+    elseif(TINYBLAKE_SANITIZER STREQUAL "msan")
+        set(_TINYBLAKE_SAN_LIST "memory")
+    else()
+        message(FATAL_ERROR
+            "Unknown TINYBLAKE_SANITIZER value: ${TINYBLAKE_SANITIZER} "
+            "(expected: asan, ubsan, asan-ubsan, tsan, msan)")
+    endif()
+    target_compile_options(tinyblake PUBLIC
+        -fsanitize=${_TINYBLAKE_SAN_LIST}
+        -fno-omit-frame-pointer
+        -fno-sanitize-recover=all
+    )
+    # target_link_options is CMake 3.13; at 3.10 we pass the flag through
+    # target_link_libraries, which forwards non-library tokens to the linker
+    # and propagates transitively via PUBLIC visibility.
+    target_link_libraries(tinyblake PUBLIC "-fsanitize=${_TINYBLAKE_SAN_LIST}")
+endif()
+
 # --- Per-backend SIMD compile flags ---
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND NOT FORCE_PORTABLE)
     # MinGW GCC + Debug: Windows x64 ABI only guarantees 16-byte stack alignment,
@@ -197,18 +250,18 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64" AND NOT FORCE_PORTABLE)
     # MSVC on ARM64: NEON is enabled by default, no extra flags needed
 endif()
 
-# --- Tests ---
-if(BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
-
-# --- Benchmarks ---
-if(BUILD_BENCH)
-    add_subdirectory(bench)
-endif()
-
-# --- Fuzzing (Clang + Linux only) ---
-if(BUILD_FUZZ)
-    add_subdirectory(fuzz)
+# --- Tests / benches / fuzzers ---
+# Only available when tinyblake is the top-level project. When consumed via
+# add_subdirectory() these never build, regardless of the parent's options.
+if(TINYBLAKE_IS_TOP_LEVEL)
+    if(TINYBLAKE_BUILD_TESTS)
+        enable_testing()
+        add_subdirectory(tests)
+    endif()
+    if(TINYBLAKE_BUILD_BENCH)
+        add_subdirectory(bench)
+    endif()
+    if(TINYBLAKE_BUILD_FUZZ)
+        add_subdirectory(fuzz)
+    endif()
 endif()

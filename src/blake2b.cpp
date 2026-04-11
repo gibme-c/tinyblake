@@ -33,6 +33,8 @@
 #include "internal/endian.h"
 
 #include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -52,11 +54,72 @@ namespace tinyblake
 
     /* ─── Dispatch (atomic function pointer, no mutex) ─── */
 
+    /* Read TINYBLAKE_BACKEND from the environment.
+     * MSVC's /sdl rejects std::getenv; use getenv_s on MSVC, plain getenv elsewhere.
+     * The pointer returned is valid until the next call on this thread. */
+    static const char *get_backend_env()
+    {
+#if defined(_MSC_VER)
+        static thread_local char buf[32];
+        size_t len = 0;
+        if (getenv_s(&len, buf, sizeof(buf), "TINYBLAKE_BACKEND") != 0 || len == 0)
+            return nullptr;
+        return buf;
+#else
+        return std::getenv("TINYBLAKE_BACKEND");
+#endif
+    }
+
     static blake2b_compress_fn resolve_compress()
     {
 #if !defined(TINYBLAKE_FORCE_PORTABLE)
         const auto &feat = cpu::detect();
 #endif
+
+        /* Test-only override: TINYBLAKE_BACKEND={portable,x64,avx2,avx512,neon}.
+         * Used by CI to exercise each compiled-in backend on a single runner.
+         * If the variable is set but the requested backend is not compiled in
+         * or not supported by the current CPU, abort loudly — silent fallthrough
+         * would give false-green CI. Unset means normal CPUID-based dispatch. */
+        if (const char *forced = get_backend_env())
+        {
+            blake2b_compress_fn fn = nullptr;
+            if (std::strcmp(forced, "portable") == 0)
+            {
+                fn = blake2b_compress_portable;
+            }
+#if (defined(__x86_64__) || defined(_M_X64)) && !defined(TINYBLAKE_FORCE_PORTABLE)
+            else if (std::strcmp(forced, "x64") == 0)
+            {
+                fn = blake2b_compress_x64;
+            }
+            else if (std::strcmp(forced, "avx2") == 0 && feat.avx2)
+            {
+                fn = blake2b_compress_avx2;
+            }
+            else if (std::strcmp(forced, "avx512") == 0 && feat.avx512f && feat.avx512vl && feat.avx512vbmi2)
+            {
+                fn = blake2b_compress_avx512;
+            }
+#endif
+#if (defined(__aarch64__) || defined(_M_ARM64) || defined(__ARM_NEON)) && !defined(TINYBLAKE_FORCE_PORTABLE)
+            else if (std::strcmp(forced, "neon") == 0 && feat.neon)
+            {
+                fn = blake2b_compress_neon;
+            }
+#endif
+            if (!fn)
+            {
+                std::fprintf(
+                    stderr,
+                    "tinyblake: TINYBLAKE_BACKEND=\"%s\" is not available "
+                    "(not compiled in, not supported by this CPU, or unknown)\n",
+                    forced);
+                std::abort();
+            }
+            std::fprintf(stderr, "tinyblake: forced backend = %s\n", forced);
+            return fn;
+        }
 
 #if (defined(__x86_64__) || defined(_M_X64)) && !defined(TINYBLAKE_FORCE_PORTABLE)
         if (feat.avx512f && feat.avx512vl && feat.avx512vbmi2)

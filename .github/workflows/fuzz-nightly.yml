@@ -1,0 +1,164 @@
+name: Fuzz Nightly
+
+# ---------------------------------------------------------------------------
+# Nightly coverage-guided fuzz runs for the per-target libFuzzer binaries.
+# libFuzzer requires Linux + Clang (see fuzz/CMakeLists.txt for the gate),
+# so this workflow runs on a single ubuntu-latest job.
+#
+# Each fuzz target runs with a configurable wall-clock budget and persists
+# its corpus across runs via GitHub Actions cache, so each night builds on
+# the previous night's coverage exploration.
+#
+# Escalation: any finding surfaced here must be triaged. The workflow opens
+# a GitHub issue with a reproducer link on failure via the gh CLI — it does
+# NOT silently patch library code.
+# ---------------------------------------------------------------------------
+
+on:
+  schedule:
+    # 04:00 UTC every night. Change only if the slot conflicts with another
+    # long-running workflow — the fuzz budget can eat up to
+    # (NUM_TARGETS * FUZZ_BUDGET_SECS) of compute per run.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      fuzz_budget_secs:
+        description: 'Per-target wall-clock budget in seconds'
+        required: false
+        default: '300'
+
+jobs:
+  libfuzzer:
+    name: libFuzzer per-target nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      # Per-target wall-clock budget. Default 300s (5 min) per target;
+      # override via workflow_dispatch. With 9 targets at default, the
+      # fuzz phase takes ~45 minutes plus build time.
+      FUZZ_BUDGET_SECS: ${{ github.event.inputs.fuzz_budget_secs || '300' }}
+      FUZZ_CORPUS_ROOT: ${{ github.workspace }}/fuzz-corpora
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install LLVM Clang toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-15 lld-15 cmake ninja-build
+          echo "CC=clang-15"    >> "$GITHUB_ENV"
+          echo "CXX=clang++-15" >> "$GITHUB_ENV"
+
+      - name: Restore fuzz corpus cache
+        id: corpus-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FUZZ_CORPUS_ROOT }}
+          # Key bumps on every run so we always pull the latest corpus,
+          # but restore-keys fall back to any previous corpus. This gives
+          # us accumulating coverage across runs without ever invalidating
+          # everything on a single config change.
+          key: tinyblake-fuzz-corpora-${{ github.run_id }}
+          restore-keys: |
+            tinyblake-fuzz-corpora-
+
+      - name: Configure with BUILD_FUZZ
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DTINYBLAKE_BUILD_TESTS=ON \
+            -DTINYBLAKE_BUILD_FUZZ=ON
+
+      - name: Build libFuzzer binaries
+        run: cmake --build build -j $(nproc)
+
+      - name: Verify unit tests still pass
+        # Cheap sanity check before spending real wall-clock on libFuzzer.
+        # If unit tests fail, do not bother running the expensive per-target
+        # pass.
+        run: ./build/tinyblake_tests
+
+      - name: Run per-target libFuzzer binaries
+        id: fuzz
+        run: |
+          set +e
+          mkdir -p "$FUZZ_CORPUS_ROOT"
+          FAIL=0
+          FAILURES=""
+          # libFuzzer binaries live in build/fuzz/ — fuzz/CMakeLists.txt
+          # doesn't override RUNTIME_OUTPUT_DIRECTORY, so Ninja places them
+          # in the binary subdirectory matching the source add_subdirectory.
+          shopt -s nullglob
+          for bin in build/fuzz/fuzz_*; do
+            # Skip anything that isn't executable (shouldn't happen on Ninja)
+            [ -x "$bin" ] || continue
+            target="$(basename "$bin")"
+            corpus="$FUZZ_CORPUS_ROOT/${target}"
+            mkdir -p "$corpus"
+            echo "---- $target ($FUZZ_BUDGET_SECS s) ----"
+            "$bin" "$corpus" \
+              -max_total_time=$FUZZ_BUDGET_SECS \
+              -print_final_stats=1 \
+              -rss_limit_mb=4096
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              FAIL=1
+              FAILURES="$FAILURES $target(rc=$rc)"
+            fi
+          done
+          if [ "$FAIL" -ne 0 ]; then
+            echo "failures=$FAILURES" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Upload corpus artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinyblake-fuzz-corpora-${{ github.run_id }}
+          path: ${{ env.FUZZ_CORPUS_ROOT }}
+          retention-days: 14
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinyblake-fuzz-crashes-${{ github.run_id }}
+          # libFuzzer writes crash-*, leak-*, oom-*, timeout-* files into
+          # the current working directory when it finds a fault.
+          path: |
+            crash-*
+            leak-*
+            oom-*
+            timeout-*
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Open tracking issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # ESCALATION: any fuzz finding surfaced by this workflow MUST be
+        # triaged by the repository owner before any library or harness
+        # code is changed. This step opens a GitHub issue with a direct
+        # link to the failing workflow run so the finding is not lost.
+        # It does NOT attempt to classify severity or propose a fix.
+        run: |
+          TITLE="Nightly fuzz finding on ${{ github.workflow }} run ${{ github.run_id }}"
+          BODY="A nightly fuzz run produced a finding that needs triage.
+
+          **Workflow run:** <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}>
+          **Failed targets:** ${{ steps.fuzz.outputs.failures }}
+          **Corpus artifact:** tinyblake-fuzz-corpora-${{ github.run_id }}
+          **Crash artifact:** tinyblake-fuzz-crashes-${{ github.run_id }}
+
+          Do NOT silently fix the library. Triage first to decide whether this is a library bug, a harness bug, or accepted behavior, then proceed with remediation."
+          gh issue create \
+            --title "$TITLE" \
+            --body "$BODY" \
+            --label "fuzz-finding,nightly" \
+            || echo "(failed to open issue — check repository labels/permissions)"

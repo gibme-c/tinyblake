@@ -44,7 +44,7 @@ Requires CMake 3.10+ and a C++17 compiler.
 
 ```bash
 # Configure and build
-cmake -S . -B build -DBUILD_TESTS=ON
+cmake -S . -B build -DTINYBLAKE_BUILD_TESTS=ON
 cmake --build build --config Release -j
 
 # Run tests
@@ -56,11 +56,12 @@ cmake --build build --config Release -j
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `BUILD_TESTS` | `OFF` | Build the unit test executable (`tinyblake_tests`) |
-| `BUILD_BENCH` | `OFF` | Build the benchmark tool (`tinyblake_bench`) |
-| `BUILD_FUZZ` | `OFF` | Build fuzz targets (Clang only) |
+| `TINYBLAKE_BUILD_TESTS` | `OFF` | Build the unit test executable (`tinyblake_tests`) — top-level only |
+| `TINYBLAKE_BUILD_BENCH` | `OFF` | Build the benchmark tool (`tinyblake_bench`) — top-level only |
+| `TINYBLAKE_BUILD_FUZZ` | `OFF` | Build fuzz targets (Clang only) — top-level only |
 | `BUILD_SHARED_LIBS` | `OFF` | Build as a shared library (`.so`/`.dll`/`.dylib`) |
-| `FORCE_PORTABLE` | `OFF` | Disable all SIMD backends; use only portable C++ code |
+| `TINYBLAKE_FORCE_PORTABLE` | `OFF` | Disable all SIMD backends; use only portable C++ code |
+| `TINYBLAKE_SANITIZER` | _(none)_ | GCC/Clang only. One of `asan`, `ubsan`, `asan-ubsan`, `tsan`, `msan`. Propagates as PUBLIC so tests and consumers inherit the flags. |
 | `CMAKE_BUILD_TYPE` | `Release` | `Debug`, `Release`, or `RelWithDebInfo` |
 
 ## Usage
@@ -189,7 +190,7 @@ All intermediate buffers — key blocks, ipad, opad, HMAC intermediates, PBKDF2 
 
 ## Testing
 
-Build with `-DBUILD_TESTS=ON` to get the `tinyblake_tests` executable. The test suite covers:
+Build with `-DTINYBLAKE_BUILD_TESTS=ON` to get the `tinyblake_tests` executable. The test suite covers:
 
 - **Known-answer tests** — RFC 7693 test vectors for BLAKE2b (empty string, "abc")
 - **Keyed hash vectors** — official BLAKE2b keyed KAT vectors across multiple input lengths
@@ -203,12 +204,16 @@ Build with `-DBUILD_TESTS=ON` to get the `tinyblake_tests` executable. The test 
 
 The test harness is a custom header-only framework (`test_harness.h`) with `TEST`/`ASSERT_EQ` macros — no external test dependencies.
 
+### Forcing a specific backend in tests
+
+For CI coverage of every compiled-in backend on a single runner, set `TINYBLAKE_BACKEND={portable,x64,avx2,avx512,neon}` at process launch. The dispatcher honors the override if that backend is both compiled in and supported by the current CPU, aborts loudly otherwise (silent fallthrough would hide a mis-wired test), and prints `tinyblake: forced backend = X` to stderr on the first dispatch. The env var is a test-only knob; production code leaves it unset and lets CPUID dispatch pick the best backend.
+
 ## Fuzzing
 
 Seven fuzz targets are provided:
 
 ```bash
-cmake -S . -B build-fuzz -DBUILD_FUZZ=ON -DCMAKE_CXX_COMPILER=clang++
+cmake -S . -B build-fuzz -DTINYBLAKE_BUILD_FUZZ=ON -DCMAKE_CXX_COMPILER=clang++
 cmake --build build-fuzz
 ./build-fuzz/fuzz_blake2b corpus/blake2b/
 ```

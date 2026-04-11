@@ -9,6 +9,14 @@ on:
     - cron: '30 3 * * 0'
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Main build-and-test matrix. Each row builds tinyblake + tests + benches
+  # for one (compiler, OS, SIMD config) combination and then runs the test
+  # suite once per compiled-in backend using the TINYBLAKE_BACKEND env var
+  # override in src/blake2b.cpp. The `backends` field enumerates exactly
+  # which backends are safe to force on that row's runner CPU — GH runners
+  # reliably expose AVX2 but not AVX-512, so x86_64 native rows stop at AVX2.
+  # ---------------------------------------------------------------------------
   build:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -16,44 +24,48 @@ jobs:
       matrix:
         include:
           # ── Linux gcc-11 ──────────────────────────────────────────
-          - { os: ubuntu-latest, cc: gcc-11,    cxx: g++-11,      name: gcc-11,    config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: ubuntu-latest, cc: gcc-11,    cxx: g++-11,      name: gcc-11,    config: native,   cmake_flags: "" }
+          - { os: ubuntu-latest, cc: gcc-11,    cxx: g++-11,      name: gcc-11,    config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-latest, cc: gcc-11,    cxx: g++-11,      name: gcc-11,    config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
           # ── Linux gcc-12 ──────────────────────────────────────────
-          - { os: ubuntu-latest, cc: gcc-12,    cxx: g++-12,      name: gcc-12,    config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: ubuntu-latest, cc: gcc-12,    cxx: g++-12,      name: gcc-12,    config: native,   cmake_flags: "" }
+          - { os: ubuntu-latest, cc: gcc-12,    cxx: g++-12,      name: gcc-12,    config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-latest, cc: gcc-12,    cxx: g++-12,      name: gcc-12,    config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
+
+          # ── Linux gcc-13 ──────────────────────────────────────────
+          - { os: ubuntu-latest, cc: gcc-13,    cxx: g++-13,      name: gcc-13,    config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-latest, cc: gcc-13,    cxx: g++-13,      name: gcc-13,    config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
           # ── Linux clang-14 ────────────────────────────────────────
-          - { os: ubuntu-latest, cc: clang-14,  cxx: clang++-14,  name: clang-14,  config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: ubuntu-latest, cc: clang-14,  cxx: clang++-14,  name: clang-14,  config: native,   cmake_flags: "" }
+          - { os: ubuntu-latest, cc: clang-14,  cxx: clang++-14,  name: clang-14,  config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-latest, cc: clang-14,  cxx: clang++-14,  name: clang-14,  config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
           # ── Linux clang-15 ────────────────────────────────────────
-          - { os: ubuntu-latest, cc: clang-15,  cxx: clang++-15,  name: clang-15,  config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: ubuntu-latest, cc: clang-15,  cxx: clang++-15,  name: clang-15,  config: native,   cmake_flags: "" }
+          - { os: ubuntu-latest, cc: clang-15,  cxx: clang++-15,  name: clang-15,  config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-latest, cc: clang-15,  cxx: clang++-15,  name: clang-15,  config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
           # ── Linux ARM64 gcc (via ubuntu-24.04-arm) ──────────────────
-          - { os: ubuntu-24.04-arm, cc: gcc,   cxx: g++,     name: gcc,   config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: ubuntu-24.04-arm, cc: gcc,   cxx: g++,     name: gcc,   config: arm64,    cmake_flags: "" }
+          - { os: ubuntu-24.04-arm, cc: gcc,   cxx: g++,     name: gcc,   config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-24.04-arm, cc: gcc,   cxx: g++,     name: gcc,   config: arm64,    cmake_flags: "",                              backends: "portable neon" }
 
           # ── Linux ARM64 clang (via ubuntu-24.04-arm) ────────────────
-          - { os: ubuntu-24.04-arm, cc: clang, cxx: clang++, name: clang, config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: ubuntu-24.04-arm, cc: clang, cxx: clang++, name: clang, config: arm64,    cmake_flags: "" }
+          - { os: ubuntu-24.04-arm, cc: clang, cxx: clang++, name: clang, config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-24.04-arm, cc: clang, cxx: clang++, name: clang, config: arm64,    cmake_flags: "",                              backends: "portable neon" }
 
           # ── macOS Homebrew clang (ARM64 — no x86 SIMD configs) ───
-          - { os: macos-latest, cc: /opt/homebrew/opt/llvm/bin/clang, cxx: /opt/homebrew/opt/llvm/bin/clang++, name: clang, config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: macos-latest, cc: /opt/homebrew/opt/llvm/bin/clang, cxx: /opt/homebrew/opt/llvm/bin/clang++, name: clang, config: arm64,    cmake_flags: "" }
+          - { os: macos-latest, cc: /opt/homebrew/opt/llvm/bin/clang, cxx: /opt/homebrew/opt/llvm/bin/clang++, name: clang, config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: macos-latest, cc: /opt/homebrew/opt/llvm/bin/clang, cxx: /opt/homebrew/opt/llvm/bin/clang++, name: clang, config: arm64,    cmake_flags: "",                              backends: "portable neon" }
 
           # ── macOS AppleClang (ARM64 — no x86 SIMD configs) ───────
-          - { os: macos-latest, name: AppleClang, config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: macos-latest, name: AppleClang, config: arm64,    cmake_flags: "" }
+          - { os: macos-latest, name: AppleClang, config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: macos-latest, name: AppleClang, config: arm64,    cmake_flags: "",                              backends: "portable neon" }
 
           # ── Windows MSVC ──────────────────────────────────────────
-          - { os: windows-latest, name: msvc, config: portable, cmake_flags: "-DFORCE_PORTABLE=ON" }
-          - { os: windows-latest, name: msvc, config: native,   cmake_flags: "" }
+          - { os: windows-latest, name: msvc, config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: windows-latest, name: msvc, config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
           # ── Windows MinGW GCC ─────────────────────────────────────
-          - { os: windows-latest, name: mingw-gcc, config: portable, cmake_flags: "-G \"MinGW Makefiles\" -DCMAKE_CXX_COMPILER=g++ -DFORCE_PORTABLE=ON" }
-          - { os: windows-latest, name: mingw-gcc, config: native,   cmake_flags: "-G \"MinGW Makefiles\" -DCMAKE_CXX_COMPILER=g++" }
+          - { os: windows-latest, name: mingw-gcc, config: portable, cmake_flags: "-G \"MinGW Makefiles\" -DCMAKE_CXX_COMPILER=g++ -DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: windows-latest, name: mingw-gcc, config: native,   cmake_flags: "-G \"MinGW Makefiles\" -DCMAKE_CXX_COMPILER=g++",                              backends: "portable x64 avx2" }
 
     name: ${{ matrix.os }} / ${{ matrix.name }} / ${{ matrix.config }}
     steps:
@@ -71,10 +83,15 @@ jobs:
         run: brew install llvm || brew upgrade llvm
 
       - name: Configure
+        shell: bash
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-        run: cmake -S . -B build -DBUILD_TESTS=ON -DBUILD_BENCH=ON ${{ matrix.cmake_flags }}
+          CMAKE_FLAGS: ${{ matrix.cmake_flags }}
+        run: |
+          # eval re-parses CMAKE_FLAGS so embedded quoted args like
+          # -G "MinGW Makefiles" survive variable expansion intact.
+          eval "cmake -S . -B build -DTINYBLAKE_BUILD_TESTS=ON -DTINYBLAKE_BUILD_BENCH=ON $CMAKE_FLAGS"
 
       - name: Build
         run: cmake --build build --config Release -j
@@ -91,10 +108,103 @@ jobs:
             echo "bench=./build/tinyblake_bench" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Tests
+      - name: Tests (all compiled-in backends)
         shell: bash
-        run: ${{ steps.exe.outputs.tests }}
+        # Exercises every backend this matrix row compiled in, using the
+        # TINYBLAKE_BACKEND env var override in src/blake2b.cpp. We grep
+        # the test binary's stderr for the "forced backend = X" diagnostic
+        # line to prove the override actually engaged — a silent fallthrough
+        # to CPUID dispatch would hide a mis-wired test and give false-green
+        # CI. The override aborts on an unavailable backend, so the per-row
+        # `backends` list must only name backends guaranteed to be present
+        # on that runner's CPU.
+        run: |
+          set -e
+          FAILED=""
+          for backend in ${{ matrix.backends }}; do
+            echo "---- backend=$backend ----"
+            OUT=$(TINYBLAKE_BACKEND=$backend ${{ steps.exe.outputs.tests }} 2>&1)
+            echo "$OUT" | tail -20
+            if ! echo "$OUT" | grep -q "tinyblake: forced backend = $backend"; then
+              echo "::error::backend=$backend — override diagnostic missing; test did not run on the forced backend"
+              FAILED="$FAILED $backend"
+              continue
+            fi
+            if ! echo "$OUT" | grep -qE "Results: [0-9]+ passed, 0 failed"; then
+              echo "::error::backend=$backend — tests failed"
+              FAILED="$FAILED $backend"
+            fi
+          done
+          if [ -n "$FAILED" ]; then
+            echo "::error::failing backends:$FAILED"
+            exit 1
+          fi
 
       - name: Benchmark
         shell: bash
         run: ${{ steps.exe.outputs.bench }}
+
+  # ---------------------------------------------------------------------------
+  # Sanitizer jobs. Separate from the main matrix because sanitizers are
+  # Linux+Clang only. Each job compiles tinyblake + tests with a specific
+  # sanitizer via the TINYBLAKE_SANITIZER CMake option and runs the test
+  # suite once per x86_64 backend to catch backend-specific UB/data races.
+  # ---------------------------------------------------------------------------
+  sanitize:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan-ubsan, tsan]
+    name: sanitize / ${{ matrix.sanitizer }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-15
+
+      - name: Configure
+        env:
+          CC: clang-15
+          CXX: clang++-15
+        # RelWithDebInfo gives sanitizers useful symbolication while still
+        # exercising the optimized compress loops. Debug would hide backend
+        # aliasing / alignment bugs that only appear after vectorization.
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DTINYBLAKE_BUILD_TESTS=ON \
+            -DTINYBLAKE_SANITIZER=${{ matrix.sanitizer }}
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Tests (per-backend under sanitizer)
+        run: |
+          set -e
+          FAILED=""
+          # UBSan exit-on-first-error is already set by -fno-sanitize-recover=all
+          # in CMakeLists.txt. ASan symbol resolution needs llvm-symbolizer.
+          export ASAN_OPTIONS="abort_on_error=1:halt_on_error=1:symbolize=1:print_stacktrace=1"
+          export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
+          export TSAN_OPTIONS="halt_on_error=1:second_deadlock_stack=1"
+          for backend in portable x64 avx2; do
+            echo "---- sanitizer=${{ matrix.sanitizer }} backend=$backend ----"
+            OUT=$(TINYBLAKE_BACKEND=$backend ./build/tinyblake_tests 2>&1)
+            echo "$OUT" | tail -30
+            if ! echo "$OUT" | grep -q "tinyblake: forced backend = $backend"; then
+              echo "::error::backend=$backend — override diagnostic missing"
+              FAILED="$FAILED $backend"
+              continue
+            fi
+            if ! echo "$OUT" | grep -qE "Results: [0-9]+ passed, 0 failed"; then
+              echo "::error::backend=$backend — tests failed under ${{ matrix.sanitizer }}"
+              FAILED="$FAILED $backend"
+            fi
+          done
+          if [ -n "$FAILED" ]; then
+            echo "::error::failing backends:$FAILED"
+            exit 1
+          fi
