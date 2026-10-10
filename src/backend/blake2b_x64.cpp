@@ -27,6 +27,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "../internal/endian.h"
+#include "../internal/secure_clear.h"
 #include "blake2b_compress.h"
 
 /*
@@ -150,6 +151,16 @@ namespace tinyblake
         {
             state[i] ^= v[i] ^ v[i + 8];
         }
+
+        /* Wipe the message schedule so no message/key material survives on the
+         * stack: m is always memory-resident (indexed by SIGMA at runtime), so a
+         * surviving frame would otherwise expose the last compressed block. v is
+         * accessed only by constant indices and is left to register allocation
+         * rather than a fixed stack slot; taking its address to wipe it would force
+         * the whole array onto the stack. Any spill of v under register pressure is
+         * compiler-managed scratch, the same best-effort residual as the SIMD
+         * backends' working rows, and is not portably clearable from C++. */
+        detail::secure_clear(m, sizeof(m));
     }
 
 #undef G

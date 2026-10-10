@@ -42,6 +42,7 @@
 #if defined(__ARM_NEON) || defined(__aarch64__) || defined(_M_ARM64)
 
 #include "../internal/endian.h"
+#include "../internal/secure_clear.h"
 
 #include <arm_neon.h>
 
@@ -234,6 +235,11 @@ namespace tinyblake
         vst1q_u64(state + 2, row1b);
         vst1q_u64(state + 4, row2a);
         vst1q_u64(state + 6, row2b);
+
+        /* Wipe the message schedule: m is memory-resident (indexed by SIGMA at
+         * runtime), so a surviving frame would otherwise expose the last block.
+         * The working rows stay in vector registers and never touch the stack. */
+        detail::secure_clear(m, sizeof(m));
     }
 
 } /* namespace tinyblake */

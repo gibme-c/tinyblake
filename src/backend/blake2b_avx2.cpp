@@ -39,6 +39,7 @@
 #if (defined(__x86_64__) || defined(_M_X64)) && (defined(__AVX2__) || defined(__GNUC__) || defined(_MSC_VER))
 
 #include "../internal/endian.h"
+#include "../internal/secure_clear.h"
 
 #include <cstring>
 #include <immintrin.h>
@@ -192,6 +193,11 @@ namespace tinyblake
 
         _mm256_storeu_si256(reinterpret_cast<__m256i *>(state), row1);
         _mm256_storeu_si256(reinterpret_cast<__m256i *>(state + 4), row2);
+
+        /* Wipe the message schedule: m is memory-resident (indexed by SIGMA at
+         * runtime), so a surviving frame would otherwise expose the last block.
+         * The working rows stay in vector registers and never touch the stack. */
+        detail::secure_clear(m, sizeof(m));
     }
 
 } /* namespace tinyblake */
