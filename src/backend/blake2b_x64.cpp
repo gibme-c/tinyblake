@@ -113,7 +113,7 @@ namespace tinyblake
 
     void blake2b_compress_x64(uint64_t state[8], const uint8_t block[128], uint64_t t0, uint64_t t1, bool last)
     {
-        uint64_t m[16];
+        volatile uint64_t m[16];
         uint64_t v[16];
 
         for (int i = 0; i < 16; ++i)
@@ -152,15 +152,16 @@ namespace tinyblake
             state[i] ^= v[i] ^ v[i + 8];
         }
 
-        /* Wipe the message schedule so no message/key material survives on the
-         * stack: m is always memory-resident (indexed by SIGMA at runtime), so a
-         * surviving frame would otherwise expose the last compressed block. v is
-         * accessed only by constant indices and is left to register allocation
-         * rather than a fixed stack slot; taking its address to wipe it would force
-         * the whole array onto the stack. Any spill of v under register pressure is
-         * compiler-managed scratch, the same best-effort residual as the SIMD
-         * backends' working rows, and is not portably clearable from C++. */
-        detail::secure_clear(m, sizeof(m));
+        /* Wipe the message schedule. m is declared volatile so every round reads
+         * each word from this array rather than from a private copy the optimizer
+         * would otherwise cache in a spill slot and never clear; this wipe then
+         * removes the only surviving copy, so no message or key material persists
+         * in the frame on return. v is accessed only by constant indices and is
+         * left to register allocation rather than a fixed stack slot; taking its
+         * address to wipe it would force the whole array onto the stack. Any spill
+         * of v under register pressure is compiler-managed scratch and is not
+         * portably clearable from C++. */
+        detail::secure_clear(const_cast<uint64_t *>(m), sizeof(m));
     }
 
 #undef G

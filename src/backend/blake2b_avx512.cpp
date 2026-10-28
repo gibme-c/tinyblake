@@ -179,7 +179,9 @@ namespace tinyblake
 
         /* Wipe the message schedule: m is memory-resident (indexed by SIGMA at
          * runtime), so a surviving frame would otherwise expose the last block.
-         * The working rows stay in vector registers and never touch the stack. */
+         * In optimized builds the working rows stay in vector registers and never
+         * touch the stack; at -O0 (debug) they spill to the frame like any other
+         * intrinsic temporary and are not portably clearable from C++. */
         detail::secure_clear(m, sizeof(m));
     }
 

@@ -2,7 +2,7 @@
 
 A zero-dependency C++17 library for BLAKE2b cryptographic hashing, with SIMD-accelerated backends and runtime CPU dispatch.
 
-TinyBLAKE implements BLAKE2b (RFC 7693), HMAC-BLAKE2b-512, and PBKDF2-HMAC-BLAKE2b-512. The core algorithm has a portable backend that compiles everywhere plus platform-specific backends (AVX2, AVX-512, NEON) that are selected automatically at runtime based on detected CPU features. All intermediate key material is securely zeroed using platform-specific mechanisms the compiler can't optimize away.
+TinyBLAKE implements BLAKE2b (RFC 7693), HMAC-BLAKE2b-512, and PBKDF2-HMAC-BLAKE2b-512. The core algorithm has a portable backend that compiles everywhere plus platform-specific backends (AVX2, AVX-512, NEON) that are selected automatically at runtime based on detected CPU features. Key material and per-block working state are zeroed after use; see the Security section for how the compress backends avoid leaving uncleared copies on the stack.
 
 Both a C++ namespace API and a plain C API (`extern "C"`) are provided. The C++ API returns `std::vector<uint8_t>` and uses sub-namespaces (`tinyblake::blake2b`, `tinyblake::hmac`, `tinyblake::pbkdf2`). The C API uses caller-provided buffers and returns `int` (0 on success, -1 on error) with full input validation.
 
@@ -33,6 +33,7 @@ HMAC and PBKDF2 use BLAKE2b internally and benefit from the same SIMD accelerati
 ### Security
 
 - **Secure memory erasure** — all intermediate state (hash state, HMAC keys, PBKDF2 intermediates) is zeroed via `tinyblake_secure_zero()`, which uses `SecureZeroMemory` (Windows), `memset_s` (C11), `explicit_bzero` (glibc), or a volatile function pointer to prevent dead-store elimination
+- **Compress working state**: the per-block message schedule is wiped on every block; the scalar backends declare it `volatile` so each round reads from the clearable array and the optimizer keeps no uncleared spill copies. Optimized builds keep the SIMD working rows in registers
 - **Constant-time comparison** — `tinyblake_constant_time_eq()` for digest verification, with volatile accumulator to prevent short-circuit optimization
 - **Input validation** — all C API functions validate pointers, lengths, and bounds before any computation; NULL inputs with non-zero length return -1
 - **HMAC defense in depth** — all inner blake2b return codes are checked; state and pads are zeroed on any failure path
