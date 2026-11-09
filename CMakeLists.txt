@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(tinyblake VERSION 1.0.0 LANGUAGES CXX)
+project(tinyblake VERSION 1.0.1 LANGUAGES CXX)
 
 include(CheckCXXCompilerFlag)
 
