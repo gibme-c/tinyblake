@@ -35,13 +35,13 @@ jobs:
           - { os: ubuntu-latest, cc: gcc-13,    cxx: g++-13,      name: gcc-13,    config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
           - { os: ubuntu-latest, cc: gcc-13,    cxx: g++-13,      name: gcc-13,    config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
-          # ── Linux clang-14 ────────────────────────────────────────
-          - { os: ubuntu-latest, cc: clang-14,  cxx: clang++-14,  name: clang-14,  config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
-          - { os: ubuntu-latest, cc: clang-14,  cxx: clang++-14,  name: clang-14,  config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
+          # ── Linux clang-20 ────────────────────────────────────────
+          - { os: ubuntu-latest, cc: clang-20,  cxx: clang++-20,  name: clang-20,  config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-latest, cc: clang-20,  cxx: clang++-20,  name: clang-20,  config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
-          # ── Linux clang-15 ────────────────────────────────────────
-          - { os: ubuntu-latest, cc: clang-15,  cxx: clang++-15,  name: clang-15,  config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
-          - { os: ubuntu-latest, cc: clang-15,  cxx: clang++-15,  name: clang-15,  config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
+          # ── Linux clang-21 ────────────────────────────────────────
+          - { os: ubuntu-latest, cc: clang-21,  cxx: clang++-21,  name: clang-21,  config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
+          - { os: ubuntu-latest, cc: clang-21,  cxx: clang++-21,  name: clang-21,  config: native,   cmake_flags: "",                              backends: "portable x64 avx2" }
 
           # ── Linux ARM64 gcc (via ubuntu-24.04-arm) ──────────────────
           - { os: ubuntu-24.04-arm, cc: gcc,   cxx: g++,     name: gcc,   config: portable, cmake_flags: "-DTINYBLAKE_FORCE_PORTABLE=ON", backends: "portable" }
@@ -163,12 +163,12 @@ jobs:
       - name: Install Clang
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-15
+          sudo apt-get install -y clang-21
 
       - name: Configure
         env:
-          CC: clang-15
-          CXX: clang++-15
+          CC: clang-21
+          CXX: clang++-21
         # RelWithDebInfo gives sanitizers useful symbolication while still
         # exercising the optimized compress loops. Debug would hide backend
         # aliasing / alignment bugs that only appear after vectorization.
